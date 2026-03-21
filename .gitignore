@@ -1,0 +1,16 @@
+# Environment
+.env
+.env.local
+!.env.example
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+
+# Testing
+.pytest_cache/
+
+# OS
+.DS_Store
