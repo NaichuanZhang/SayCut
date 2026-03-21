@@ -12,13 +12,18 @@ SayCut is an AI-powered visual audio storybook maker. Users create interactive s
 uv sync
 export BOSONAI_API_KEY="your-key"   # Voice agent (hackathon.boson.ai)
 export EIGENAI_API_KEY="your-key"   # Image, video, TTS, script LLM (api-web.eigenai.com)
-uv run python assistant.py
 ```
 
 ## Commands
 
 ```bash
-# Run the assistant (all flags optional)
+# Run the backend (FastAPI + WebSocket on port 3001)
+uv run uvicorn backend.main:app --port 3001
+
+# Run the frontend (Next.js on port 3000)
+cd frontend && npm run dev
+
+# Run the CLI demo (standalone, all flags optional)
 uv run python assistant.py
 uv run python assistant.py --system-prompt "You are an ASR system." --no-tools
 uv run python assistant.py --model higgs-audio-understanding-v3-Hackathon
@@ -38,9 +43,9 @@ uv run pytest tests/test_integration.py::TestSafeEvalMath::test_basic_addition -
 
 **Stack**: Next.js frontend → FastAPI backend → BosonAI + EigenAI APIs. Generated assets stored on local filesystem.
 
-**Voice agent data flow**: Audio file → `audio.py` (load → resample 16kHz → Silero VAD → 4s chunk → base64 WAV) → `api.py` (build messages → OpenAI-compatible call) → text response
+**Production data flow**: Browser mic → `useAudioRecorder` (16kHz PCM → WAV → base64) → `useAgent` → `WSClient` (WebSocket) → `ws_handler.py` → `VoiceAgent` → `audio.py` (VAD → 4s chunks) → BosonAI API → streamed response → WebSocket events → frontend stores
 
-**Tool use flow** (v3.5): `tools.py` injects `<tools>` JSON into system prompt → model responds with `<tool_call>` tags → `parse_tool_calls` extracts & normalizes → `execute_tool_call` runs locally → result sent back as `<tool_response>` → model generates final answer (up to 3 rounds)
+**Tool use flow** (v3.5): `tools.py` injects `<tools>` JSON into system prompt → model responds with `<tool_call>` tags → `parse_tool_calls` extracts & normalizes → `execute_tool_call` runs locally → result sent back as `<tool_response>` → model generates final answer (up to 3 rounds). In production, `storybook_tools.py` provides async executors for script/image/video/audio/edit generation.
 
 **AI Models**:
 - Voice Agent (STT + tool calling): `higgs-audio-understanding-v3.5-Hackathon` via BosonAI (`hackathon.boson.ai/v1`)
@@ -51,9 +56,20 @@ uv run pytest tests/test_integration.py::TestSafeEvalMath::test_basic_addition -
 - Text-to-Speech: `higgs2p5` via EigenAI (`data.eigenai.com`, WebSocket streaming)
 
 **Key modules**:
+- `backend/main.py` — FastAPI app, mounts `/assets` static files, exposes `/ws` WebSocket and `/health`
+- `backend/ws_handler.py` — WebSocket endpoint: session init, routes `audio_data`/`text_message` to `VoiceAgent`
+- `backend/ws_protocol.py` — Message type enums (`ClientMessageType`, `ServerMessageType`), encode/decode helpers
+- `backend/voice_agent.py` — Async `VoiceAgent` class: streaming responses, multi-turn history, tool call loop
+- `backend/storybook_tools.py` — Async tool executors (script, image, audio, video, edit) with DB persistence
+- `backend/db.py` — Async SQLite layer (sessions, storybooks, scenes, messages) via `aiosqlite`
+- `backend/asset_storage.py` — Save/serve generated assets on local filesystem
+- `backend/config.py` — Env vars, paths (`ASSETS_DIR`, `DB_PATH`), `BACKEND_PORT`
 - `bosonUtil/audio.py` — Audio chunking pipeline; VAD model is cached as a module-level singleton
 - `bosonUtil/api.py` — API config constants, `build_messages()`, and `predict()` for one-shot calls
 - `bosonUtil/tools.py` — Tool definitions, `<tool_call>` tag parsing (handles array/object/nested formats), safe math eval
+- `frontend/app/lib/wsClient.ts` — `WSClient` class: WebSocket connection with auto-reconnect
+- `frontend/app/hooks/useAgent.ts` — React hook: connects WSClient, dispatches server messages to stores
+- `frontend/app/hooks/useAudioRecorder.ts` — React hook: browser mic → 16kHz PCM WAV → base64
 - `assistant.py` — Standalone CLI demo of the voice agent (not the production entry point)
 
 ## HiggsAudioM3 API Specs

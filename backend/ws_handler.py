@@ -1,0 +1,146 @@
+"""WebSocket endpoint for the SayCut voice agent."""
+
+import base64
+import logging
+
+from fastapi import WebSocket, WebSocketDisconnect
+
+from backend.db import create_session, get_session, init_db
+from backend.config import DB_PATH
+from backend.voice_agent import VoiceAgent, STORYBOOK_SYSTEM_PROMPT
+from backend.ws_protocol import (
+    ClientMessageType,
+    ServerMessageType,
+    decode_client_message,
+    encode_server_message,
+)
+
+logger = logging.getLogger(__name__)
+
+# Module-level agent instance (created lazily)
+_agent: VoiceAgent | None = None
+
+
+def get_agent() -> VoiceAgent:
+    global _agent
+    if _agent is None:
+        import os
+
+        api_key = os.environ.get("BOSONAI_API_KEY", "EMPTY")
+        _agent = VoiceAgent(api_key=api_key)
+    return _agent
+
+
+async def websocket_endpoint(websocket: WebSocket):
+    """Handle a WebSocket connection for the voice agent."""
+    await websocket.accept()
+    logger.info("WebSocket connected")
+
+    session_id: str | None = None
+    db = await init_db(DB_PATH)
+
+    try:
+        while True:
+            raw = await websocket.receive_text()
+            msg_type, payload = decode_client_message(raw)
+
+            if msg_type is None:
+                logger.warning("Invalid message: %s", payload.get("error"))
+                await websocket.send_text(
+                    encode_server_message(
+                        ServerMessageType.ERROR, message=payload.get("error", "Unknown error")
+                    )
+                )
+                continue
+
+            logger.debug("Received message type=%s", msg_type.value)
+
+            # Require session_init before any other message
+            if session_id is None and msg_type != ClientMessageType.SESSION_INIT:
+                await websocket.send_text(
+                    encode_server_message(
+                        ServerMessageType.ERROR, message="Must send session_init first"
+                    )
+                )
+                continue
+
+            if msg_type == ClientMessageType.SESSION_INIT:
+                requested_id = payload.get("session_id")
+                if requested_id:
+                    existing = await get_session(db, requested_id)
+                    if existing:
+                        session_id = requested_id
+                    else:
+                        session_id = await create_session(db)
+                else:
+                    session_id = await create_session(db)
+
+                logger.info("Session initialized: %s", session_id)
+                await websocket.send_text(
+                    encode_server_message(
+                        ServerMessageType.SESSION_CREATED, session_id=session_id
+                    )
+                )
+
+            elif msg_type == ClientMessageType.TEXT_MESSAGE:
+                text = payload.get("text", "")
+                agent = get_agent()
+
+                async def send_event(event_type, **kwargs):
+                    await websocket.send_text(
+                        encode_server_message(ServerMessageType(event_type), **kwargs)
+                    )
+
+                try:
+                    await agent.process_text(
+                        session_id=session_id,
+                        text=text,
+                        send_event=send_event,
+                    )
+                except Exception:
+                    logger.exception("Error processing text message")
+                    await websocket.send_text(
+                        encode_server_message(
+                            ServerMessageType.ERROR, message="Failed to process text"
+                        )
+                    )
+                finally:
+                    logger.debug("Sending agent_idle after text processing")
+                    await websocket.send_text(
+                        encode_server_message(ServerMessageType.AGENT_IDLE)
+                    )
+
+            elif msg_type == ClientMessageType.AUDIO_DATA:
+                audio_b64 = payload.get("data", "")
+                audio_bytes = base64.b64decode(audio_b64)
+                logger.debug("Received audio data, size=%d bytes", len(audio_bytes))
+                agent = get_agent()
+
+                async def send_event(event_type, **kwargs):
+                    await websocket.send_text(
+                        encode_server_message(ServerMessageType(event_type), **kwargs)
+                    )
+
+                try:
+                    await agent.process_audio(
+                        session_id=session_id,
+                        audio_bytes=audio_bytes,
+                        send_event=send_event,
+                    )
+                except Exception:
+                    logger.exception("Error processing audio data")
+                    await websocket.send_text(
+                        encode_server_message(
+                            ServerMessageType.ERROR, message="Failed to process audio"
+                        )
+                    )
+                finally:
+                    logger.debug("Sending agent_idle after audio processing")
+                    await websocket.send_text(
+                        encode_server_message(ServerMessageType.AGENT_IDLE)
+                    )
+
+    except WebSocketDisconnect:
+        logger.info("WebSocket disconnected (session=%s)", session_id)
+    finally:
+        await db.close()

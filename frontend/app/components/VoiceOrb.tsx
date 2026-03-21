@@ -5,7 +5,7 @@ import { motion } from "framer-motion";
 import clsx from "clsx";
 import { useUIStore } from "../stores/uiStore";
 import { useAudioRecorder } from "../hooks/useAudioRecorder";
-import { useMockAgent } from "../hooks/useMockAgent";
+import { useAgent } from "../hooks/useAgent";
 import { VoiceWaveform } from "./VoiceWaveform";
 
 interface VoiceOrbProps {
@@ -22,7 +22,7 @@ const stateStyles = {
 } as const;
 
 const stateLabels = {
-  idle: "Hold to speak",
+  idle: "Tap to speak",
   listening: "Listening...",
   thinking: "Thinking...",
   speaking: "Speaking...",
@@ -45,27 +45,42 @@ export function VoiceOrb({ compact = false }: VoiceOrbProps) {
   const setAgentState = useUIStore((s) => s.setAgentState);
   const { startRecording, stopRecording, analyserNode, error } =
     useAudioRecorder();
-  const { sendMessage } = useMockAgent();
+  const { sendAudio } = useAgent();
 
-  const handlePointerDown = useCallback(async () => {
+  const handleClick = useCallback(async () => {
     if (agentState === "thinking" || agentState === "speaking") return;
-    await startRecording();
-    setRecording(true);
-    setAgentState("listening");
-  }, [agentState, startRecording, setRecording, setAgentState]);
 
-  const handlePointerUp = useCallback(async () => {
-    if (!isRecording) return;
-    stopRecording();
-    setRecording(false);
-    await sendMessage();
-  }, [isRecording, stopRecording, setRecording, sendMessage]);
+    if (!isRecording) {
+      console.debug(
+        "[SayCut] VoiceOrb click: start recording, agentState:",
+        agentState,
+      );
+      await startRecording();
+      setRecording(true);
+      setAgentState("listening");
+    } else {
+      console.debug("[SayCut] VoiceOrb click: stop recording");
+      const base64Wav = stopRecording();
+      setRecording(false);
+      if (base64Wav) {
+        sendAudio(base64Wav);
+      }
+    }
+  }, [
+    agentState,
+    isRecording,
+    startRecording,
+    stopRecording,
+    setRecording,
+    setAgentState,
+    sendAudio,
+  ]);
 
   return (
     <div
       className={clsx(
         "flex flex-col items-center gap-2",
-        compact ? "py-3" : "pb-8 pt-4"
+        compact ? "py-3" : "pb-8 pt-4",
       )}
     >
       <div
@@ -94,7 +109,7 @@ export function VoiceOrb({ compact = false }: VoiceOrbProps) {
             stateStyles[agentState],
             stateBorderColors[agentState],
             (agentState === "thinking" || agentState === "speaking") &&
-              "cursor-not-allowed opacity-80"
+              "cursor-not-allowed opacity-80",
           )}
           style={{ width: orbSize, height: orbSize }}
           whileTap={
@@ -102,9 +117,7 @@ export function VoiceOrb({ compact = false }: VoiceOrbProps) {
               ? { scale: 0.95 }
               : undefined
           }
-          onPointerDown={handlePointerDown}
-          onPointerUp={handlePointerUp}
-          onPointerLeave={handlePointerUp}
+          onClick={handleClick}
           aria-label={stateLabels[agentState]}
         >
           <svg
@@ -114,7 +127,7 @@ export function VoiceOrb({ compact = false }: VoiceOrbProps) {
               agentState === "idle" && "text-accent-cyan",
               agentState === "listening" && "text-accent-red",
               agentState === "thinking" && "text-accent-amber",
-              agentState === "speaking" && "text-accent-green"
+              agentState === "speaking" && "text-accent-green",
             )}
             viewBox="0 0 24 24"
             fill="none"
@@ -133,7 +146,7 @@ export function VoiceOrb({ compact = false }: VoiceOrbProps) {
       <span
         className={clsx(
           "font-display text-text-muted select-none",
-          compact ? "text-[10px]" : "text-xs"
+          compact ? "text-[10px]" : "text-xs",
         )}
       >
         {stateLabels[agentState]}

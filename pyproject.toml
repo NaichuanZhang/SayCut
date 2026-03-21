@@ -16,11 +16,16 @@ dependencies = [
     "httpx>=0.28.0",
     "websockets>=15.0",
     "python-dotenv>=1.0.0",
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.34.0",
+    "aiosqlite>=0.21.0",
 ]
 
 [dependency-groups]
 dev = [
     "pytest>=8.0.0",
+    "pytest-asyncio>=0.25.0",
+    "httpx>=0.28.0",
 ]
 
 [tool.pytest.ini_options]

@@ -95,9 +95,19 @@ All models are served by **BosonAI** and **EigenAI** APIs:
 
 ```bash
 uv sync
+cd frontend && npm install && cd ..
 export BOSONAI_API_KEY="your-key"   # Voice agent (hackathon.boson.ai)
 export EIGENAI_API_KEY="your-key"   # Image, video, TTS, script LLM (api-web.eigenai.com)
-uv run python assistant.py
+```
+
+### Running
+
+```bash
+# Backend (FastAPI + WebSocket on port 3001)
+uv run uvicorn backend.main:app --port 3001
+
+# Frontend (Next.js on port 3000, connects to backend via WebSocket)
+cd frontend && npm run dev
 ```
 
 ### CLI Demo
@@ -112,10 +122,29 @@ uv run python assistant.py --model higgs-audio-understanding-v3-Hackathon
 
 ## Architecture
 
-- **`bosonUtil/audio.py`** — Audio chunking pipeline: load, resample to 16kHz, Silero VAD segmentation, 4-second chunking, base64 WAV encoding.
-- **`bosonUtil/api.py`** — API configuration, message building, and prediction calls against the OpenAI-compatible endpoint.
-- **`bosonUtil/tools.py`** — Tool definitions, `<tool_call>` tag parsing, and safe math evaluation.
-- **`assistant.py`** — CLI demo: multi-turn voice conversation with streaming responses and tool call loop.
+### Backend (`backend/`)
+- **`main.py`** — FastAPI app: `/ws` WebSocket endpoint, `/health`, static asset serving
+- **`ws_handler.py`** — WebSocket session management, routes audio/text to the voice agent
+- **`ws_protocol.py`** — Client/server message type enums and JSON encode/decode
+- **`voice_agent.py`** — Async `VoiceAgent`: streaming responses, conversation history, tool call loop
+- **`storybook_tools.py`** — Async tool executors for script, image, audio, video, and image editing
+- **`db.py`** — Async SQLite (sessions, storybooks, scenes, messages) via `aiosqlite`
+- **`asset_storage.py`** — Save/serve generated assets (images, video, audio) on local filesystem
+- **`config.py`** — Env vars, paths, port config
+
+### Shared utilities (`bosonUtil/`)
+- **`audio.py`** — Audio chunking pipeline: load, resample to 16kHz, Silero VAD segmentation, 4-second chunking, base64 WAV encoding
+- **`api.py`** — API configuration, message building, and prediction calls against the OpenAI-compatible endpoint
+- **`tools.py`** — Tool definitions, `<tool_call>` tag parsing, and safe math evaluation
+
+### Frontend (`frontend/app/`)
+- **`lib/wsClient.ts`** — `WSClient` class: WebSocket connection to backend with auto-reconnect
+- **`hooks/useAgent.ts`** — React hook: manages WebSocket lifecycle, dispatches server events to stores
+- **`hooks/useAudioRecorder.ts`** — React hook: browser mic capture → 16kHz PCM WAV → base64
+- **`components/VoiceOrb.tsx`** — Toggle-click voice input (tap to start/stop recording)
+
+### CLI demo
+- **`assistant.py`** — Standalone CLI demo of the voice agent (not the production entry point)
 
 ## Tests
 
