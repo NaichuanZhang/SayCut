@@ -1,0 +1,56 @@
+import { create } from "zustand";
+import { Scene } from "../lib/types";
+
+interface StorybookStore {
+  readonly scenes: readonly Scene[];
+  addScene: (scene: Scene) => void;
+  updateSceneImage: (sceneId: string, imageUrl: string) => void;
+  updateSceneVideo: (sceneId: string, videoUrl: string) => void;
+  updateSceneTTS: (sceneId: string, audioUrl: string) => void;
+  updateSceneStatus: (sceneId: string, status: Scene["status"]) => void;
+  updateSceneNarration: (sceneId: string, narrationText: string) => void;
+  clear: () => void;
+}
+
+export const useStorybookStore = create<StorybookStore>((set) => ({
+  scenes: [],
+
+  addScene: (scene) => set((state) => ({ scenes: [...state.scenes, scene] })),
+
+  updateSceneImage: (sceneId, imageUrl) =>
+    set((state) => ({
+      scenes: state.scenes.map((s) =>
+        s.id === sceneId ? { ...s, imageUrl, status: "ready" as const } : s,
+      ),
+    })),
+
+  updateSceneVideo: (sceneId, videoUrl) =>
+    set((state) => ({
+      scenes: state.scenes.map((s) =>
+        s.id === sceneId ? { ...s, videoUrl } : s,
+      ),
+    })),
+
+  updateSceneTTS: (sceneId, audioUrl) =>
+    set((state) => ({
+      scenes: state.scenes.map((s) =>
+        s.id === sceneId ? { ...s, audioUrl } : s,
+      ),
+    })),
+
+  updateSceneStatus: (sceneId, status) =>
+    set((state) => ({
+      scenes: state.scenes.map((s) =>
+        s.id === sceneId ? { ...s, status } : s,
+      ),
+    })),
+
+  updateSceneNarration: (sceneId, narrationText) =>
+    set((state) => ({
+      scenes: state.scenes.map((s) =>
+        s.id === sceneId ? { ...s, narrationText } : s,
+      ),
+    })),
+
+  clear: () => set({ scenes: [] }),
+}));
