@@ -27,6 +27,9 @@ from bosonUtil.tools import (
     parse_tool_calls,
 )
 
+# Keep system prompt + last N messages to avoid context overflow
+MAX_HISTORY_MESSAGES = 20
+
 # Type for the event callback: async def send_event(event_type, **kwargs)
 SendEvent = Callable[..., Awaitable[None]]
 
@@ -88,6 +91,12 @@ class VoiceAgent:
     def get_history(self, session_id: str) -> list[dict]:
         return list(self._histories.get(session_id, []))
 
+    def _trim_history(self, history: list[dict]) -> list[dict]:
+        """Return a trimmed copy of history: system prompt + last MAX_HISTORY_MESSAGES."""
+        if len(history) <= MAX_HISTORY_MESSAGES + 1:
+            return history
+        return [history[0]] + history[-(MAX_HISTORY_MESSAGES):]
+
     async def _create_stream(self, messages: list[dict]):
         """Create an async streaming chat completion. Separated for testability."""
         return await self._client.chat.completions.create(
@@ -109,7 +118,7 @@ class VoiceAgent:
         logger.debug("Streaming start, message_id=%s", message_id)
         await send_event("agent_stream_start", message_id=message_id)
 
-        stream = await self._create_stream(messages)
+        stream = await self._create_stream(self._trim_history(messages))
         full_text = ""
         async for chunk in stream:
             delta = chunk.choices[0].delta

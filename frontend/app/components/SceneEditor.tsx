@@ -89,7 +89,18 @@ export function SceneEditor() {
             </div>
           )}
 
-          {scene.status === "ready" && scene.imageUrl && (
+          {scene.status === "ready" && scene.videoUrl && (
+            <video
+              src={scene.videoUrl}
+              className="w-full h-full object-cover"
+              autoPlay
+              loop
+              muted
+              playsInline
+            />
+          )}
+
+          {scene.status === "ready" && !scene.videoUrl && scene.imageUrl && (
             // eslint-disable-next-line @next/next/no-img-element
             <img
               src={scene.imageUrl}

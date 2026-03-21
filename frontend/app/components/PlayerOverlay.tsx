@@ -92,14 +92,22 @@ export function PlayerOverlay() {
                 exit={{ opacity: 0 }}
                 transition={{ duration: FADE_DURATION / 1000 }}
               >
-                {currentScene.imageUrl && (
+                {currentScene.videoUrl ? (
+                  <video
+                    src={currentScene.videoUrl}
+                    className="w-full h-full object-contain"
+                    autoPlay
+                    muted
+                    playsInline
+                  />
+                ) : currentScene.imageUrl ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
                     src={currentScene.imageUrl}
                     alt={currentScene.title}
                     className="w-full h-full object-contain"
                   />
-                )}
+                ) : null}
               </motion.div>
             </AnimatePresence>
 
