@@ -11,6 +11,7 @@ class ServerMessageType(str, Enum):
     AGENT_STREAM_CHUNK = "agent_stream_chunk"
     AGENT_STREAM_END = "agent_stream_end"
     TOOL_STATUS = "tool_status"
+    STORYBOOK_CREATED = "storybook_created"
     SCENE_ADD = "scene_add"
     SCENE_UPDATE = "scene_update"
     AGENT_IDLE = "agent_idle"

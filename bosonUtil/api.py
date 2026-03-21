@@ -31,7 +31,7 @@ EXTRA_BODY = {"skip_special_tokens": False}
 # Generation parameters
 DEFAULT_TEMPERATURE = 0.2
 DEFAULT_TOP_P = 0.9
-DEFAULT_MAX_TOKENS = 2048
+DEFAULT_MAX_TOKENS = 4096
 
 
 # ──────────────────────────────────────────────────────────────────────────────

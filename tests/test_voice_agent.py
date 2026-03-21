@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from backend.voice_agent import VoiceAgent
+from bosonUtil.tools import MAX_TOOL_CALLS_PER_TURN
 
 
 def _make_mock_chunk(content: str | None, finish_reason: str | None = None):
@@ -98,8 +99,10 @@ async def test_tool_call_detected_and_executed():
     tool_response_text = '<tool_call>{"name": "calculate", "arguments": {"expression": "2+2"}}</tool_call>'
     mock_stream1 = _make_mock_stream([tool_response_text])
     mock_stream2 = _make_mock_stream(["The answer is 4"])
+    # After tool result, model responds without tool call → nudge fires → final response
+    mock_stream3 = _make_mock_stream(["All done!"])
 
-    with patch.object(agent, "_create_stream", side_effect=[mock_stream1, mock_stream2]):
+    with patch.object(agent, "_create_stream", side_effect=[mock_stream1, mock_stream2, mock_stream3]):
         await agent.process_text(
             session_id="s1", text="What is 2+2?", send_event=send_event
         )
@@ -115,9 +118,8 @@ async def test_max_tool_call_rounds():
     send_event = AsyncMock()
 
     tool_text = '<tool_call>{"name": "calculate", "arguments": {"expression": "1+1"}}</tool_call>'
-    # Create 4 streams that all return tool calls — should only process 3
-    streams = [_make_mock_stream([tool_text]) for _ in range(4)]
-    # The 4th stream should not be called
+    # Create MAX+1 streams that all return tool calls — should only process MAX
+    streams = [_make_mock_stream([tool_text]) for _ in range(MAX_TOOL_CALLS_PER_TURN + 1)]
     final_stream = _make_mock_stream(["done"])
     streams.append(final_stream)
 
@@ -126,10 +128,9 @@ async def test_max_tool_call_rounds():
             session_id="s1", text="loop", send_event=send_event
         )
 
-    # Count how many times tool_status was sent (should be 3 rounds max)
+    # Count how many times tool_status was sent (start + end per round)
     tool_events = [
         c for c in send_event.call_args_list
         if c.args[0] == "tool_status" or (c.kwargs and c.kwargs.get("event_type") == "tool_status")
     ]
-    # At most MAX_TOOL_CALLS_PER_TURN rounds
-    assert len(tool_events) <= 3 * 2  # start + end per round
+    assert len(tool_events) <= MAX_TOOL_CALLS_PER_TURN * 2

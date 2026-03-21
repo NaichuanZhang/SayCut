@@ -2,7 +2,9 @@ import { create } from "zustand";
 import { Scene } from "../lib/types";
 
 interface StorybookStore {
+  readonly storybookId: string | null;
   readonly scenes: readonly Scene[];
+  setStorybookId: (id: string) => void;
   addScene: (scene: Scene) => void;
   updateSceneImage: (sceneId: string, imageUrl: string) => void;
   updateSceneVideo: (sceneId: string, videoUrl: string) => void;
@@ -13,7 +15,10 @@ interface StorybookStore {
 }
 
 export const useStorybookStore = create<StorybookStore>((set) => ({
+  storybookId: null,
   scenes: [],
+
+  setStorybookId: (id) => set({ storybookId: id }),
 
   addScene: (scene) => set((state) => ({ scenes: [...state.scenes, scene] })),
 
@@ -52,5 +57,5 @@ export const useStorybookStore = create<StorybookStore>((set) => ({
       ),
     })),
 
-  clear: () => set({ scenes: [] }),
+  clear: () => set({ storybookId: null, scenes: [] }),
 }));

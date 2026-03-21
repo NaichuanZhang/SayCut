@@ -45,7 +45,14 @@ uv run pytest tests/test_integration.py::TestSafeEvalMath::test_basic_addition -
 
 **Production data flow**: Browser mic → `useAudioRecorder` (16kHz PCM → WAV → base64) → `useAgent` → `WSClient` (WebSocket) → `ws_handler.py` → `VoiceAgent` → `audio.py` (VAD → 4s chunks) → BosonAI API → streamed response → WebSocket events → frontend stores
 
-**Tool use flow** (v3.5): `tools.py` injects `<tools>` JSON into system prompt → model responds with `<tool_call>` tags → `parse_tool_calls` extracts & normalizes → `execute_tool_call` runs locally → result sent back as `<tool_response>` → model generates final answer (up to 3 rounds). In production, `storybook_tools.py` provides async executors for script/image/video/audio/edit generation.
+**Tool use flow** (v3.5): `build_system_prompt()` injects `<tools>` JSON into system prompt (accepts custom tool defs via `tools` param) → model responds with `<tool_call>` tags → `parse_tool_calls` extracts & normalizes → tool executor runs the tool → result sent back as `<tool_response>` → model generates follow-up (up to 6 rounds). In production, `ws_handler.py` passes `STORYBOOK_TOOLS` + a `tool_executor` closure that lazily creates a storybook and delegates to `execute_storybook_tool()`. An auto-nudge mechanism re-prompts the model if it narrates intent without calling a tool after a tool response.
+
+**Storybook creation flow** (voice-driven, multi-turn):
+1. User describes a story via voice → model calls `generate_script` → storybook + scenes created in DB → `scene_add` events sent to frontend
+2. Model chains `generate_scene_image` for all scenes → images saved, `scene_update` events with `imageUrl`
+3. Model chains `generate_scene_audio` for all scenes → TTS audio saved, `scene_update` events with `audioUrl`
+4. Model chains `generate_scene_video` for all scenes → video saved, `scene_update` events with `videoUrl`
+5. User can request edits ("make the kitten bigger in scene 2") → `edit_scene_image`
 
 **AI Models**:
 - Voice Agent (STT + tool calling): `higgs-audio-understanding-v3.5-Hackathon` via BosonAI (`hackathon.boson.ai/v1`)
@@ -57,16 +64,16 @@ uv run pytest tests/test_integration.py::TestSafeEvalMath::test_basic_addition -
 
 **Key modules**:
 - `backend/main.py` — FastAPI app, mounts `/assets` static files, exposes `/ws` WebSocket and `/health`
-- `backend/ws_handler.py` — WebSocket endpoint: session init, routes `audio_data`/`text_message` to `VoiceAgent`
-- `backend/ws_protocol.py` — Message type enums (`ClientMessageType`, `ServerMessageType`), encode/decode helpers
-- `backend/voice_agent.py` — Async `VoiceAgent` class: streaming responses, multi-turn history, tool call loop
+- `backend/ws_handler.py` — WebSocket endpoint: session init, `tool_executor` closure with lazy storybook creation, routes `audio_data`/`text_message` to `VoiceAgent`
+- `backend/ws_protocol.py` — Message type enums (`ClientMessageType`, `ServerMessageType` incl. `STORYBOOK_CREATED`), encode/decode helpers
+- `backend/voice_agent.py` — Async `VoiceAgent` class: streaming responses, multi-turn history, tool call loop with auto-nudge, custom tools injection via `tools` param
 - `backend/storybook_tools.py` — Async tool executors (script, image, audio, video, edit) with DB persistence
 - `backend/db.py` — Async SQLite layer (sessions, storybooks, scenes, messages) via `aiosqlite`
 - `backend/asset_storage.py` — Save/serve generated assets on local filesystem
 - `backend/config.py` — Env vars, paths (`ASSETS_DIR`, `DB_PATH`), `BACKEND_PORT`
 - `bosonUtil/audio.py` — Audio chunking pipeline; VAD model is cached as a module-level singleton
 - `bosonUtil/api.py` — API config constants, `build_messages()`, and `predict()` for one-shot calls
-- `bosonUtil/tools.py` — Tool definitions, `<tool_call>` tag parsing (handles array/object/nested formats), safe math eval
+- `bosonUtil/tools.py` — Tool definitions, `<tool_call>` tag parsing (handles array/object/nested formats), `build_system_prompt()` with custom tools param, safe math eval
 - `frontend/app/lib/wsClient.ts` — `WSClient` class: WebSocket connection with auto-reconnect
 - `frontend/app/hooks/useAgent.ts` — React hook: connects WSClient, dispatches server messages to stores
 - `frontend/app/hooks/useAudioRecorder.ts` — React hook: browser mic → 16kHz PCM WAV → base64
@@ -100,7 +107,7 @@ Optional text can precede audio chunks in the same user message (used for ASR in
 ### Required API Parameters
 - **stop sequences** (do not modify): `["<|eot_id|>", "<|endoftext|>", "<|audio_eos|>", "<|im_end|>"]`
 - **extra_body** (do not modify): `{"skip_special_tokens": false}`
-- Default generation: `temperature=0.2`, `top_p=0.9`, `max_tokens=2048`
+- Default generation: `temperature=0.2`, `top_p=0.9`, `max_tokens=4096`
 
 ### Prompt Patterns
 - **General chat**: System prompt only; audio is the user input
@@ -113,7 +120,7 @@ Optional text can precede audio chunks in the same user message (used for ASR in
 2. Model responds with `<tool_call>...</tool_call>` tags containing JSON
 3. Tool call JSON may be an array or object, with nested `function` field or flat format
 4. Execute tool locally, send result back as user message: `<tool_response>{"name": "...", "result": ...}</tool_response>`
-5. Model generates final answer (or another tool call — loop up to 3 times)
+5. Model generates final answer (or another tool call — loop up to 6 times)
 
 ### Multi-turn Conversations
 - Append messages to the list as normal (system → user → assistant → user → ...)

@@ -33,12 +33,22 @@ SendEvent = Callable[..., Awaitable[None]]
 # Default system prompt for the storybook agent
 STORYBOOK_SYSTEM_PROMPT = (
     "You are SayCut, an AI-powered visual storybook maker. "
-    "Help users create interactive storybooks through voice conversation. "
-    "You can generate scripts, images, audio narration, and video for scenes. "
-    "Be creative, friendly, and guide users through the storybook creation process.\n\n"
+    "Help users create interactive storybooks through voice conversation.\n\n"
+    "WORKFLOW — follow this order automatically, do NOT wait for user confirmation between steps:\n"
+    "1. When the user describes a story idea, call generate_script.\n"
+    "2. After the script result comes back, IMMEDIATELY call generate_scene_image for ALL scenes.\n"
+    "3. After all images are done, IMMEDIATELY call generate_scene_audio for ALL scenes.\n"
+    "4. After all audio is done, IMMEDIATELY call generate_scene_video for ALL scenes.\n"
+    "5. If the user asks to modify a scene's image, use edit_scene_image.\n\n"
+    "CRITICAL RULES:\n"
+    "- When you decide to use a tool, you MUST include <tool_call> tags. Never just describe what you will do.\n"
+    "- After receiving a <tool_response>, immediately call the next tool(s) — do not stop to chat.\n"
+    "- You can call multiple tools at once by putting multiple JSON objects in one <tool_call> tag.\n"
+    "- Keep your text responses SHORT. Prioritize calling tools over narrating.\n\n"
     "IMPORTANT: Always begin your response by quoting what you heard from the user "
     'in the format: [Heard: "<transcript>"]\n'
-    "Then proceed with your answer."
+    "Then proceed with your answer.\n\n"
+    "Use Thinking."
 )
 
 
@@ -52,6 +62,7 @@ class VoiceAgent:
         model: str = DEFAULT_MODEL,
         system_prompt: str = STORYBOOK_SYSTEM_PROMPT,
         tools_enabled: bool = True,
+        tools: list[dict] | None = None,
     ):
         self._client = AsyncOpenAI(
             base_url=base_url,
@@ -60,7 +71,9 @@ class VoiceAgent:
             max_retries=3,
         )
         self._model = model
-        self._system_prompt = build_system_prompt(system_prompt, tools_enabled)
+        self._system_prompt = build_system_prompt(
+            system_prompt, tools_enabled, tools=tools
+        )
         self._tools_enabled = tools_enabled
         # In-memory conversation history per session
         self._histories: dict[str, list[dict]] = {}
@@ -118,34 +131,51 @@ class VoiceAgent:
         tool_executor: Callable | None = None,
     ) -> str:
         """Process tool calls in the response, up to MAX_TOOL_CALLS_PER_TURN rounds."""
+        did_execute_tool = False
+
         for round_num in range(MAX_TOOL_CALLS_PER_TURN):
             tool_calls = parse_tool_calls(response_text)
+
             if not tool_calls:
-                break
+                if not did_execute_tool:
+                    # No tool calls at all in the initial response — done
+                    break
+                # Model got a tool response but didn't chain the next tool call.
+                # Nudge it once to continue the workflow.
+                did_execute_tool = False
+                logger.info("Nudging model to continue tool workflow")
+                history.append({
+                    "role": "user",
+                    "content": "Continue — call the next tool(s) now.",
+                })
+                response_text = await self._stream_and_collect(history, send_event)
+                history.append({"role": "assistant", "content": response_text})
+                continue
 
             logger.info("Tool call round %d: %d calls detected", round_num + 1, len(tool_calls))
 
             for tc in tool_calls:
                 tc_name = tc["name"]
                 tc_args = tc["arguments"]
-
                 logger.debug("Executing tool: %s", tc_name)
-                await send_event("tool_status", tool_name=tc_name, status="running")
 
                 if tool_executor:
                     result = await tool_executor(tc_name, tc_args, send_event)
                 else:
+                    await send_event("tool_status", tool_name=tc_name, status="running")
                     try:
                         result = execute_tool_call(tc_name, tc_args)
                     except Exception as e:
                         logger.error("Tool %s failed: %s", tc_name, e)
                         result = {"name": tc_name, "error": str(e)}
+                    await send_event("tool_status", tool_name=tc_name, status="done")
 
                 logger.debug("Tool %s result: %s", tc_name, result)
-                await send_event("tool_status", tool_name=tc_name, status="done")
 
                 tool_response = f"<tool_response>{json.dumps(result)}</tool_response>"
                 history.append({"role": "user", "content": tool_response})
+
+            did_execute_tool = True
 
             # Get follow-up response
             response_text = await self._stream_and_collect(history, send_event)

@@ -30,6 +30,7 @@ export function useAgent() {
   );
   const addToolStatus = useConversationStore((s) => s.addToolStatus);
 
+  const setStorybookId = useStorybookStore((s) => s.setStorybookId);
   const addScene = useStorybookStore((s) => s.addScene);
   const updateSceneImage = useStorybookStore((s) => s.updateSceneImage);
   const updateSceneVideo = useStorybookStore((s) => s.updateSceneVideo);
@@ -46,10 +47,12 @@ export function useAgent() {
       switch (msg.type) {
         case "session_created":
           sessionIdRef.current = msg.session_id as string;
-          console.debug(
-            "[SayCut] Session created:",
-            sessionIdRef.current,
-          );
+          console.debug("[SayCut] Session created:", sessionIdRef.current);
+          break;
+
+        case "storybook_created":
+          setStorybookId(msg.storybook_id as string);
+          console.debug("[SayCut] Storybook created:", msg.storybook_id);
           break;
 
         case "agent_thinking":
@@ -156,6 +159,7 @@ export function useAgent() {
     },
     [
       setAgentState,
+      setStorybookId,
       startAgentMessage,
       appendAgentChunk,
       finalizeAgentMessage,

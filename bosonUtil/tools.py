@@ -3,7 +3,7 @@
 import json
 import re
 
-MAX_TOOL_CALLS_PER_TURN = 3
+MAX_TOOL_CALLS_PER_TURN = 6
 
 CALCULATOR_TOOLS = [
     {
@@ -77,9 +77,14 @@ def parse_tool_calls(text: str) -> list[dict]:
     return results
 
 
-def build_system_prompt(base_prompt: str, tools_enabled: bool) -> str:
+def build_system_prompt(
+    base_prompt: str,
+    tools_enabled: bool,
+    tools: list[dict] | None = None,
+) -> str:
     """Build system prompt, optionally embedding tool definitions."""
     if not tools_enabled:
         return base_prompt
-    tools_json = json.dumps({"tools": CALCULATOR_TOOLS})
+    tool_defs = tools if tools is not None else CALCULATOR_TOOLS
+    tools_json = json.dumps({"tools": tool_defs})
     return f"{base_prompt}\n<tools>\n{tools_json}\n</tools>"

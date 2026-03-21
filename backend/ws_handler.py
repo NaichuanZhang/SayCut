@@ -5,8 +5,9 @@ import logging
 
 from fastapi import WebSocket, WebSocketDisconnect
 
-from backend.db import create_session, get_session, init_db
-from backend.config import DB_PATH
+from backend.db import create_session, create_storybook, get_session, init_db
+from backend.config import ASSETS_DIR, DB_PATH
+from backend.storybook_tools import STORYBOOK_TOOLS, execute_storybook_tool
 from backend.voice_agent import VoiceAgent, STORYBOOK_SYSTEM_PROMPT
 from backend.ws_protocol import (
     ClientMessageType,
@@ -27,7 +28,7 @@ def get_agent() -> VoiceAgent:
         import os
 
         api_key = os.environ.get("BOSONAI_API_KEY", "EMPTY")
-        _agent = VoiceAgent(api_key=api_key)
+        _agent = VoiceAgent(api_key=api_key, tools=STORYBOOK_TOOLS)
     return _agent
 
 
@@ -37,7 +38,37 @@ async def websocket_endpoint(websocket: WebSocket):
     logger.info("WebSocket connected")
 
     session_id: str | None = None
+    storybook_id: str | None = None
     db = await init_db(DB_PATH)
+
+    async def _tool_executor(name: str, args: dict, send_event) -> dict:
+        nonlocal storybook_id
+        if name == "generate_script" and storybook_id is None:
+            storybook_id = await create_storybook(db, session_id, "")
+            await send_event(
+                "storybook_created", storybook_id=storybook_id
+            )
+        if storybook_id is None:
+            return {
+                "name": name,
+                "error": "No storybook yet. Please generate a script first.",
+            }
+        result = await execute_storybook_tool(
+            name,
+            args,
+            send_event=send_event,
+            db=db,
+            session_id=session_id,
+            storybook_id=storybook_id,
+            assets_dir=ASSETS_DIR,
+        )
+        if name == "generate_script" and "title" in result:
+            await db.execute(
+                "UPDATE storybooks SET title = ? WHERE id = ?",
+                (result["title"], storybook_id),
+            )
+            await db.commit()
+        return result
 
     try:
         while True:
@@ -96,6 +127,7 @@ async def websocket_endpoint(websocket: WebSocket):
                         session_id=session_id,
                         text=text,
                         send_event=send_event,
+                        tool_executor=_tool_executor,
                     )
                 except Exception:
                     logger.exception("Error processing text message")
@@ -126,6 +158,7 @@ async def websocket_endpoint(websocket: WebSocket):
                         session_id=session_id,
                         audio_bytes=audio_bytes,
                         send_event=send_event,
+                        tool_executor=_tool_executor,
                     )
                 except Exception:
                     logger.exception("Error processing audio data")
