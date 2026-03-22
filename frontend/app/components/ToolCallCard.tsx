@@ -3,6 +3,7 @@
 import { motion } from "framer-motion";
 import clsx from "clsx";
 import { Message } from "../lib/types";
+import { useStorybookStore } from "../stores/storybookStore";
 
 interface ToolCallCardProps {
   readonly message: Message;
@@ -75,6 +76,10 @@ export function ToolCallCard({ message }: ToolCallCardProps) {
     message.toolStatus?.includes("ready") ||
     message.toolStatus?.includes("Ready");
   const isImageResult = isComplete && toolName.includes("image");
+  const sceneImageUrl = useStorybookStore((s) => {
+    if (!isImageResult || !message.sceneId) return null;
+    return s.scenes.find((sc) => sc.id === message.sceneId)?.imageUrl ?? null;
+  });
 
   return (
     <motion.div
@@ -138,15 +143,12 @@ export function ToolCallCard({ message }: ToolCallCardProps) {
           )}
 
           {/* Thumbnail for image results */}
-          {isImageResult && (
-            <div className="mt-2 w-16 h-9 rounded bg-bg-surface overflow-hidden">
-              <div
-                className="w-full h-full"
-                style={{
-                  background:
-                    "linear-gradient(135deg, var(--accent-green) 0%, var(--accent-cyan) 100%)",
-                  opacity: 0.3,
-                }}
+          {isImageResult && sceneImageUrl && (
+            <div className="mt-2 w-full rounded overflow-hidden">
+              <img
+                src={sceneImageUrl}
+                alt="Generated scene"
+                className="w-full aspect-video object-cover rounded"
               />
             </div>
           )}

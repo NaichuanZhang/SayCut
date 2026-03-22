@@ -8,6 +8,7 @@ export interface Message {
   readonly isStreaming?: boolean;
   readonly toolName?: string;
   readonly toolStatus?: string;
+  readonly sceneId?: string;
 }
 
 export interface Scene {

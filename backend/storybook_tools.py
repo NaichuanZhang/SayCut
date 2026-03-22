@@ -435,5 +435,6 @@ async def execute_storybook_tool(
 
     elapsed = time.monotonic() - start_time
     logger.info("Tool %s completed in %.2fs", tool_name, elapsed)
-    await send_event("tool_status", tool_name=tool_name, status="done")
+    scene_id = result.get("scene_id")
+    await send_event("tool_status", tool_name=tool_name, status="done", **({"scene_id": scene_id} if scene_id else {}))
     return result

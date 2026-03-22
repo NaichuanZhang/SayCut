@@ -123,7 +123,11 @@ export function useAgent(storybookId?: string) {
           break;
 
         case "tool_status":
-          addToolStatus(msg.tool_name as string, msg.status as string);
+          addToolStatus(
+            msg.tool_name as string,
+            msg.status as string,
+            msg.scene_id as string | undefined,
+          );
           break;
 
         case "scene_add": {

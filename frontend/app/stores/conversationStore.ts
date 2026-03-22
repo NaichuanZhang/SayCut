@@ -8,7 +8,7 @@ interface ConversationStore {
   startAgentMessage: () => string;
   appendAgentChunk: (id: string, text: string) => void;
   finalizeAgentMessage: (id: string) => void;
-  addToolStatus: (name: string, status: string) => void;
+  addToolStatus: (name: string, status: string, sceneId?: string) => void;
   loadMessages: (msgs: readonly Message[]) => void;
   clear: () => void;
 }
@@ -66,7 +66,7 @@ export const useConversationStore = create<ConversationStore>((set) => ({
       ),
     })),
 
-  addToolStatus: (name, status) =>
+  addToolStatus: (name, status, sceneId?) =>
     set((state) => {
       const existingIdx = state.messages.findIndex(
         (m) =>
@@ -75,7 +75,14 @@ export const useConversationStore = create<ConversationStore>((set) => ({
       if (existingIdx !== -1) {
         return {
           messages: state.messages.map((m, i) =>
-            i === existingIdx ? { ...m, text: status, toolStatus: status } : m,
+            i === existingIdx
+              ? {
+                  ...m,
+                  text: status,
+                  toolStatus: status,
+                  ...(sceneId ? { sceneId } : {}),
+                }
+              : m,
           ),
         };
       }
@@ -88,6 +95,7 @@ export const useConversationStore = create<ConversationStore>((set) => ({
             text: status,
             toolName: name,
             toolStatus: status,
+            ...(sceneId ? { sceneId } : {}),
             timestamp: Date.now(),
           },
         ],
