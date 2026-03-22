@@ -53,9 +53,6 @@ STORY_SYSTEM_PROMPT = (
     "- After receiving a <tool_response>, immediately call the next tool(s) — do not stop to chat.\n"
     "- You can call multiple tools at once by putting multiple JSON objects in one <tool_call> tag.\n"
     "- Keep your text responses SHORT. Prioritize calling tools over narrating.\n\n"
-    "IMPORTANT: Always begin your response by quoting what you heard from the user "
-    'in the format: [Heard: "<transcript>"]\n'
-    "Then proceed with your answer.\n\n"
     "Use Thinking."
 )
 
@@ -78,9 +75,6 @@ MOVIE_SYSTEM_PROMPT = (
     "- After receiving a <tool_response>, immediately call the next tool(s) — do not stop to chat.\n"
     "- You can call multiple tools at once by putting multiple JSON objects in one <tool_call> tag.\n"
     "- Keep your text responses SHORT. Prioritize calling tools over narrating.\n\n"
-    "IMPORTANT: Always begin your response by quoting what you heard from the user "
-    'in the format: [Heard: "<transcript>"]\n'
-    "Then proceed with your answer.\n\n"
     "Use Thinking."
 )
 

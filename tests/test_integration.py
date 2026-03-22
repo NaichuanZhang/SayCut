@@ -400,7 +400,6 @@ def _build_seeded_history() -> list[dict]:
         {
             "role": "assistant",
             "content": (
-                '[Heard: "Create a story about a brave kitten exploring the forest"]\n'
                 f"I'll create that story for you!\n<tool_call>{script_tool_call}</tool_call>"
             ),
         },

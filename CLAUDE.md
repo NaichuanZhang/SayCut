@@ -8,7 +8,7 @@ SayCut is an AI-powered visual audio storybook maker. Users create interactive s
 
 SayCut supports two modes:
 - **Story mode**: Single narrator with `narration_text` per scene, single TTS voice ("Linda")
-- **Movie mode**: 2-person conversational scripts with `dialogue_lines` per scene, 3 voices (Narrator + 2 characters), multi-voice TTS via WAV concatenation
+- **Movie mode**: 2-person conversational scripts with `dialogue_lines` per scene, 3 voices (Narrator via Morgan Freeman voice_id + 2 characters), multi-voice TTS via WAV concatenation
 
 ## Setup
 

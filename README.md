@@ -6,7 +6,7 @@ SayCut lets you build rich, narrated visual storybooks through natural voice con
 
 SayCut supports two creation modes:
 - **Story mode** — Single narrator with narration text per scene, single TTS voice
-- **Movie mode** — 2-person conversational scripts with dialogue lines per scene, 3 voices (Narrator + 2 characters), multi-voice TTS via WAV concatenation
+- **Movie mode** — 2-person conversational scripts with dialogue lines per scene, 3 voices (Narrator via Morgan Freeman clone + 2 characters), multi-voice TTS via WAV concatenation
 
 ## How It Works
 

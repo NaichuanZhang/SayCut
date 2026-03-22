@@ -10,6 +10,7 @@ from .eigen_config import EIGENAI_GENERATE_URL, build_auth_headers, resolve_eige
 
 DEFAULT_MODEL = "higgs2p5"
 DEFAULT_VOICE = "Linda"
+MORGAN_FREEMAN_VOICE_ID = "5fdbb23ac32e44b8abfe2cea405d0495"
 TTS_SAMPLE_RATE = 24_000
 TTS_SAMPLE_WIDTH = 2  # 16-bit
 TTS_CHANNELS = 1  # mono
@@ -27,12 +28,19 @@ async def synthesize_speech(
     text: str,
     *,
     voice: str = DEFAULT_VOICE,
+    voice_id: str | None = None,
     model: str = DEFAULT_MODEL,
     api_key: str | None = None,
 ) -> TTSResult:
     key = resolve_eigenai_api_key(api_key)
-    headers = {**build_auth_headers(key), "Content-Type": "application/json"}
-    payload = {"model": model, "text": text, "voice": voice}
+    headers = build_auth_headers(key)
+
+    headers["Content-Type"] = "application/json"
+    payload: dict[str, str] = {"model": model, "text": text}
+    if voice_id:
+        payload["voice_id"] = voice_id
+    else:
+        payload["voice"] = voice
 
     async with httpx.AsyncClient(timeout=TIMEOUT_S) as client:
         response = await client.post(EIGENAI_GENERATE_URL, headers=headers, json=payload)

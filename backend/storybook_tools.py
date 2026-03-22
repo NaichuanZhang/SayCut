@@ -15,7 +15,7 @@ from bosonUtil.eigen_script import generate_script
 from bosonUtil.eigen_image_gen import generate_image
 from bosonUtil.eigen_image_edit import edit_image
 from bosonUtil.eigen_i2v import generate_video
-from bosonUtil.eigen_tts import synthesize_speech
+from bosonUtil.eigen_tts import synthesize_speech, MORGAN_FREEMAN_VOICE_ID
 
 from backend.asset_storage import delete_asset, save_asset, get_asset_url
 from backend.db import create_scene, delete_scene, get_scenes_by_storybook, get_storybook, shift_scene_indices, update_scene_field
@@ -425,11 +425,14 @@ async def _execute_generate_dialogue_audio(
 
     # Build voice map from storybook characters
     sb = await get_storybook(db, storybook_id)
-    voice_map: dict[str, str] = {"Narrator": "Linda"}  # default
+    # voice_map values: {"voice": name} or {"voice_id": id}
+    voice_map: dict[str, dict[str, str]] = {
+        "Narrator": {"voice_id": MORGAN_FREEMAN_VOICE_ID},
+    }
     if sb and sb.get("characters"):
         chars = json.loads(sb["characters"])
         for c in chars:
-            voice_map[c["name"]] = c["voice"]
+            voice_map[c["name"]] = {"voice": c["voice"]}
 
     # Synthesize each line
     wav_segments: list[bytes] = []
@@ -438,8 +441,8 @@ async def _execute_generate_dialogue_audio(
         text = line.get("text", "")
         if not text.strip():
             continue
-        voice = voice_map.get(character, "Linda")
-        result = await synthesize_speech(text, voice=voice)
+        voice_cfg = voice_map.get(character, {"voice": "Linda"})
+        result = await synthesize_speech(text, **voice_cfg)
         wav_segments.append(result.wav_bytes)
 
     if not wav_segments:

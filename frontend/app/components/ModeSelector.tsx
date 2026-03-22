@@ -55,7 +55,7 @@ export function ModeSelector({ onConfirm }: ModeSelectorProps) {
       return;
     }
     const characters: CharacterConfig[] = [
-      { name: "Narrator", voice: "Linda" },
+      { name: "Narrator", voice: "MorganFreeman" },
       { name: char1Name || "Linda", voice: char1Voice },
       { name: char2Name || "Jack", voice: char2Voice },
     ];
@@ -273,7 +273,7 @@ export function ModeSelector({ onConfirm }: ModeSelectorProps) {
             </div>
 
             <p className="text-[11px] text-text-muted/60">
-              A Narrator voice (Linda) is included automatically.
+              A Narrator voice (Morgan Freeman) is included automatically.
             </p>
           </motion.div>
         )}
