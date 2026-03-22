@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import clsx from "clsx";
 import { motion } from "framer-motion";
 
 const BACKEND_URL =
@@ -30,6 +31,56 @@ interface ProjectCardProps {
   readonly thumbnailUrl: string | null;
   readonly sceneCount: number;
   readonly createdAt: string;
+  readonly featured?: boolean;
+}
+
+function FeaturedCard({
+  id,
+  title,
+  thumbnailUrl,
+  sceneCount,
+  createdAt,
+}: Omit<ProjectCardProps, "featured">) {
+  const thumb = prefixUrl(thumbnailUrl);
+
+  return (
+    <Link href={`/project/${id}`}>
+      <div className="group cursor-pointer rounded-xl overflow-hidden border border-border-subtle hover:border-accent-cyan/40 transition-colors card-glow card-depth relative">
+        <div className="aspect-video sm:aspect-[21/9] bg-bg-elevated relative overflow-hidden">
+          {thumb ? (
+            <img
+              src={thumb}
+              alt={title}
+              className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-[1.03]"
+            />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-accent-cyan/5 to-accent-amber/5">
+              <span className="text-5xl text-accent-cyan/10 font-display">
+                SC
+              </span>
+            </div>
+          )}
+          {/* Full gradient overlay for text readability */}
+          <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
+          {/* Overlay content */}
+          <div className="absolute bottom-0 left-0 right-0 p-5 sm:p-6 flex items-end justify-between">
+            <div>
+              <h3 className="font-display text-lg sm:text-xl text-text-primary drop-shadow-sm">
+                {title}
+              </h3>
+              <p className="text-sm text-text-muted/80 mt-1 font-display">
+                {sceneCount} {sceneCount === 1 ? "scene" : "scenes"} &middot;{" "}
+                {relativeDate(createdAt)}
+              </p>
+            </div>
+            <span className="hidden sm:inline-flex px-3 py-1 rounded-full bg-accent-cyan/10 border border-accent-cyan/20 text-xs font-display text-accent-cyan backdrop-blur-sm">
+              Latest
+            </span>
+          </div>
+        </div>
+      </div>
+    </Link>
+  );
 }
 
 export function ProjectCard({
@@ -38,7 +89,20 @@ export function ProjectCard({
   thumbnailUrl,
   sceneCount,
   createdAt,
+  featured = false,
 }: ProjectCardProps) {
+  if (featured) {
+    return (
+      <FeaturedCard
+        id={id}
+        title={title}
+        thumbnailUrl={thumbnailUrl}
+        sceneCount={sceneCount}
+        createdAt={createdAt}
+      />
+    );
+  }
+
   const thumb = prefixUrl(thumbnailUrl);
 
   return (
@@ -46,10 +110,10 @@ export function ProjectCard({
       <motion.div
         whileHover={{ scale: 1.03, y: -2 }}
         transition={{ duration: 0.2 }}
-        className="group cursor-pointer rounded-xl overflow-hidden border border-border-subtle bg-bg-surface/60 hover:border-accent-cyan/40 transition-colors"
+        className="group cursor-pointer rounded-xl overflow-hidden border border-border-subtle bg-bg-surface/60 hover:border-accent-cyan/40 transition-colors card-glow card-depth"
       >
         {/* Thumbnail */}
-        <div className="aspect-video bg-bg-elevated relative overflow-hidden">
+        <div className="aspect-video bg-bg-elevated relative overflow-hidden thumb-overlay">
           {thumb ? (
             <img
               src={thumb}
@@ -57,14 +121,14 @@ export function ProjectCard({
               className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
             />
           ) : (
-            <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-bg-elevated to-bg-primary">
-              <span className="text-3xl text-text-muted/30 font-display">
+            <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-accent-cyan/5 to-accent-amber/5">
+              <span className="text-3xl text-accent-cyan/15 font-display">
                 SC
               </span>
             </div>
           )}
           {/* Scene count badge */}
-          <span className="absolute bottom-2 right-2 px-2 py-0.5 rounded-full bg-black/60 text-[11px] font-display text-text-muted backdrop-blur-sm">
+          <span className="absolute bottom-2 right-2 z-10 px-2 py-0.5 rounded-full bg-black/60 border border-white/10 text-[11px] font-display text-text-muted backdrop-blur-sm">
             {sceneCount} {sceneCount === 1 ? "scene" : "scenes"}
           </span>
         </div>
