@@ -21,6 +21,13 @@ from backend.db import create_scene, get_scenes_by_storybook, update_scene_field
 
 SendEvent = Callable[..., Awaitable[None]]
 
+
+async def _validate_scene(db: aiosqlite.Connection, scene_id: str) -> dict | None:
+    """Return scene row if it exists, or None."""
+    cursor = await db.execute("SELECT * FROM scenes WHERE id = ?", (scene_id,))
+    row = await cursor.fetchone()
+    return dict(row) if row else None
+
 STORYBOOK_TOOLS = [
     {
         "type": "function",
@@ -151,20 +158,24 @@ async def _execute_generate_script(
     title = script.get("title", "Untitled Story")
     scenes_data = script.get("scenes", [])
 
+    existing_scenes = await get_scenes_by_storybook(db, storybook_id)
+    idx_offset = len(existing_scenes)
+
     result_scenes = []
     for i, s in enumerate(scenes_data):
+        idx = idx_offset + i
         scene_id = await create_scene(
             db,
             storybook_id=storybook_id,
-            idx=i,
-            title=s.get("title", f"Scene {i + 1}"),
+            idx=idx,
+            title=s.get("title", f"Scene {idx + 1}"),
             narration_text=s.get("narration_text", ""),
             visual_description=s.get("visual_description", ""),
         )
         scene_payload = {
             "id": scene_id,
-            "index": i,
-            "title": s.get("title", f"Scene {i + 1}"),
+            "index": idx,
+            "title": s.get("title", f"Scene {idx + 1}"),
             "narrationText": s.get("narration_text", ""),
             "visualDescription": s.get("visual_description", ""),
             "imageUrl": None,
@@ -192,6 +203,10 @@ async def _execute_generate_image(
     scene_id = args["scene_id"]
     description = args["visual_description"]
 
+    scene = await _validate_scene(db, scene_id)
+    if not scene:
+        return {"name": "generate_scene_image", "error": f"Scene {scene_id} not found"}
+
     image_bytes = await generate_image(description)
 
     filename = f"scene_{scene_id}.png"
@@ -215,6 +230,10 @@ async def _execute_generate_audio(
 ) -> dict:
     scene_id = args["scene_id"]
     text = args["narration_text"]
+
+    scene = await _validate_scene(db, scene_id)
+    if not scene:
+        return {"name": "generate_scene_audio", "error": f"Scene {scene_id} not found"}
 
     result = await synthesize_speech(text)
 
@@ -242,6 +261,10 @@ async def _execute_generate_video(
 ) -> dict:
     scene_id = args["scene_id"]
     motion_prompt = args.get("motion_prompt", "gentle slow motion, cinematic")
+
+    scene = await _validate_scene(db, scene_id)
+    if not scene:
+        return {"name": "generate_scene_video", "error": f"Scene {scene_id} not found"}
 
     # Get the scene's image path from DB
     cursor = await db.execute("SELECT image_path FROM scenes WHERE id = ?", (scene_id,))
@@ -272,6 +295,10 @@ async def _execute_edit_image(
 ) -> dict:
     scene_id = args["scene_id"]
     edit_prompt = args["edit_prompt"]
+
+    scene = await _validate_scene(db, scene_id)
+    if not scene:
+        return {"name": "edit_scene_image", "error": f"Scene {scene_id} not found"}
 
     # Get the scene's current image path
     cursor = await db.execute("SELECT image_path FROM scenes WHERE id = ?", (scene_id,))

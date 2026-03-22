@@ -141,7 +141,8 @@ async def websocket_endpoint(websocket: WebSocket):
                 # Inject context into the voice agent so it knows about the existing storybook
                 scenes = await get_scenes_by_storybook(db, storybook_id)
                 scene_titles = ", ".join(
-                    f'Scene {s["idx"] + 1}: "{s["title"]}"' for s in scenes
+                    f'Scene {s["idx"] + 1} (id="{s["id"]}"): "{s["title"]}"'
+                    for s in scenes
                 )
                 context = (
                     f'Previously, you created a storybook titled "{sb["title"]}" '
