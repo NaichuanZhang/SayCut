@@ -187,6 +187,105 @@ uv run python assistant.py --model higgs-audio-understanding-v3-Hackathon
 ### CLI demo
 - **`assistant.py`** — Standalone CLI demo of the voice agent (not the production entry point)
 
+## Data Flows
+
+### Voice Interaction Flow
+
+Real-time voice data path from browser microphone to AI response:
+
+```mermaid
+sequenceDiagram
+    participant Mic as Browser Mic
+    participant Rec as useAudioRecorder
+    participant WS as WSClient
+    participant Handler as ws_handler.py
+    participant Agent as VoiceAgent
+    participant Audio as audio.py
+    participant Boson as BosonAI API
+    participant Stores as Zustand Stores
+    participant UI as React UI
+
+    Mic->>Rec: Raw PCM audio
+    Rec->>Rec: Resample to 16kHz, encode WAV, base64
+    Rec->>WS: audio_data message
+    WS->>Handler: WebSocket frame
+    Handler->>Agent: process_audio()
+    Agent->>Audio: VAD segmentation
+    Audio->>Audio: Split into 4s chunks
+    Agent->>Boson: Chat completion (audio chunks)
+    Boson-->>Agent: Streamed text response
+    Agent-->>Handler: Token chunks
+    Handler-->>WS: agent_response events
+    WS-->>Stores: Dispatch to conversationStore
+    Stores-->>UI: Re-render messages
+```
+
+### Storybook Creation Flow
+
+Tool call chain for generating a complete storybook (Story and Movie modes):
+
+```mermaid
+flowchart TD
+    A[User describes idea via voice] --> B{Mode?}
+
+    B -->|Story| C[generate_script]
+    B -->|Movie| D[generate_movie_script]
+
+    C --> E[Scenes created in DB<br/>scene_add events to frontend]
+    D --> E
+
+    E --> F[generate_scene_image<br/>per scene]
+    F --> G[scene_update: imageUrl]
+
+    G --> H{Mode?}
+    H -->|Story| I[generate_scene_audio<br/>Single narrator TTS]
+    H -->|Movie| J[generate_scene_dialogue_audio<br/>Multi-voice TTS + WAV concat]
+
+    I --> K[scene_update: audioUrl]
+    J --> K
+
+    K --> L[generate_scene_video<br/>Image-to-video per scene]
+    L --> M[scene_update: videoUrl]
+
+    M --> N[Storybook ready for playback]
+
+    style A fill:#1a1a2e,stroke:#00d4ff,color:#fff
+    style N fill:#1a1a2e,stroke:#00d4ff,color:#fff
+    style B fill:#16213e,stroke:#e94560,color:#fff
+    style H fill:#16213e,stroke:#e94560,color:#fff
+```
+
+### Tool Use Loop
+
+The v3.5 tool calling protocol between the voice agent and BosonAI:
+
+```mermaid
+flowchart TD
+    A[System prompt with<br/>tools JSON block] --> B[Send to BosonAI model]
+    B --> C{Response contains<br/>tool_call tags?}
+
+    C -->|No| D[Final text response<br/>sent to frontend]
+    C -->|Yes| E[parse_tool_calls<br/>extracts + normalizes]
+
+    E --> F[tool_executor runs tool]
+    F --> G[Send tool_response<br/>back to model]
+
+    G --> H{Round < 6?}
+    H -->|Yes| B
+    H -->|No| D
+
+    F --> I[send_event to frontend<br/>scene_add / scene_update]
+
+    G --> J{Model narrates intent<br/>without calling tool?}
+    J -->|Yes| K[Auto-nudge:<br/>re-prompt model]
+    K --> B
+    J -->|No| B
+
+    style A fill:#1a1a2e,stroke:#00d4ff,color:#fff
+    style D fill:#1a1a2e,stroke:#00d4ff,color:#fff
+    style K fill:#16213e,stroke:#e94560,color:#fff
+```
+
 ## Tests
 
 ```bash
