@@ -175,7 +175,11 @@ async def _execute_generate_script(
         await send_event("scene_add", scene=scene_payload)
         result_scenes.append(scene_payload)
 
-    return {"name": "generate_script", "title": title, "scenes": result_scenes}
+    model_scenes = [
+        {"id": s["id"], "index": s["index"], "title": s["title"], "narrationText": s["narrationText"]}
+        for s in result_scenes
+    ]
+    return {"name": "generate_script", "title": title, "scenes": model_scenes}
 
 
 async def _execute_generate_image(
@@ -199,7 +203,7 @@ async def _execute_generate_image(
     await update_scene_field(db, scene_id, "status", "ready")
     await send_event("scene_update", scene_id=scene_id, field="imageUrl", value=url)
 
-    return {"name": "generate_scene_image", "scene_id": scene_id, "imageUrl": url}
+    return {"name": "generate_scene_image", "scene_id": scene_id, "status": "done"}
 
 
 async def _execute_generate_audio(
@@ -224,7 +228,7 @@ async def _execute_generate_audio(
     return {
         "name": "generate_scene_audio",
         "scene_id": scene_id,
-        "audioUrl": url,
+        "status": "done",
         "duration_s": result.duration_s,
     }
 
@@ -256,7 +260,7 @@ async def _execute_generate_video(
     await update_scene_field(db, scene_id, "video_path", rel_path)
     await send_event("scene_update", scene_id=scene_id, field="videoUrl", value=url)
 
-    return {"name": "generate_scene_video", "scene_id": scene_id, "videoUrl": url}
+    return {"name": "generate_scene_video", "scene_id": scene_id, "status": "done"}
 
 
 async def _execute_edit_image(
@@ -286,7 +290,7 @@ async def _execute_edit_image(
     await update_scene_field(db, scene_id, "image_path", rel_path)
     await send_event("scene_update", scene_id=scene_id, field="imageUrl", value=url)
 
-    return {"name": "edit_scene_image", "scene_id": scene_id, "imageUrl": url}
+    return {"name": "edit_scene_image", "scene_id": scene_id, "status": "done"}
 
 
 async def execute_storybook_tool(

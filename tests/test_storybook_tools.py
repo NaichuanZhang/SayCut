@@ -102,6 +102,10 @@ class TestExecuteGenerateScript:
         scene_add_events = [e for e in events if e["type"] == "scene_add"]
         assert len(scene_add_events) == 2
 
+        # Model response should only contain text fields, no URLs
+        for scene in result["scenes"]:
+            assert set(scene.keys()) == {"id", "index", "title", "narrationText"}
+
         scenes = await get_scenes_by_storybook(db, storybook_id)
         assert len(scenes) == 2
 
@@ -136,14 +140,11 @@ class TestExecuteGenerateImage:
                 assets_dir=assets_dir,
             )
 
-        assert "imageUrl" in result
+        assert "imageUrl" not in result
+        assert result["status"] == "done"
         update_events = [e for e in events if e["type"] == "scene_update"]
         assert len(update_events) >= 1
         assert update_events[-1]["field"] == "imageUrl"
-
-        # File exists on disk
-        rel_path = result["imageUrl"].replace("/assets/", "")
-        assert os.path.isfile(os.path.join(assets_dir, rel_path))
 
 
 class TestExecuteGenerateAudio:
@@ -180,7 +181,8 @@ class TestExecuteGenerateAudio:
                 assets_dir=assets_dir,
             )
 
-        assert "audioUrl" in result
+        assert "audioUrl" not in result
+        assert result["status"] == "done"
         update_events = [e for e in events if e["type"] == "scene_update"]
         assert any(e["field"] == "audioUrl" for e in update_events)
 
@@ -224,7 +226,8 @@ class TestExecuteGenerateVideo:
                 assets_dir=assets_dir,
             )
 
-        assert "videoUrl" in result
+        assert "videoUrl" not in result
+        assert result["status"] == "done"
         update_events = [e for e in events if e["type"] == "scene_update"]
         assert any(e["field"] == "videoUrl" for e in update_events)
 
@@ -270,7 +273,8 @@ class TestExecuteEditImage:
                 assets_dir=assets_dir,
             )
 
-        assert "imageUrl" in result
+        assert "imageUrl" not in result
+        assert result["status"] == "done"
 
 
 class TestExecuteUnknownTool:

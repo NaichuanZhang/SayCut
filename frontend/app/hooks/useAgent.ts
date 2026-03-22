@@ -36,6 +36,7 @@ export function useAgent() {
   const updateSceneVideo = useStorybookStore((s) => s.updateSceneVideo);
   const updateSceneTTS = useStorybookStore((s) => s.updateSceneTTS);
   const updateSceneStatus = useStorybookStore((s) => s.updateSceneStatus);
+  const clear = useStorybookStore((s) => s.clear);
 
   const setAgentState = useUIStore((s) => s.setAgentState);
   const selectScene = useUIStore((s) => s.selectScene);
@@ -51,7 +52,9 @@ export function useAgent() {
           break;
 
         case "storybook_created":
+          clear();
           setStorybookId(msg.storybook_id as string);
+          firstSceneAdded.current = false;
           console.debug("[SayCut] Storybook created:", msg.storybook_id);
           break;
 
@@ -165,6 +168,7 @@ export function useAgent() {
       finalizeAgentMessage,
       addToolStatus,
       addScene,
+      clear,
       updateSceneImage,
       updateSceneVideo,
       updateSceneTTS,

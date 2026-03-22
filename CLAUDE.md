@@ -45,7 +45,7 @@ uv run pytest tests/test_integration.py::TestSafeEvalMath::test_basic_addition -
 
 **Production data flow**: Browser mic → `useAudioRecorder` (16kHz PCM → WAV → base64) → `useAgent` → `WSClient` (WebSocket) → `ws_handler.py` → `VoiceAgent` → `audio.py` (VAD → 4s chunks) → BosonAI API → streamed response → WebSocket events → frontend stores
 
-**Tool use flow** (v3.5): `build_system_prompt()` injects `<tools>` JSON into system prompt (accepts custom tool defs via `tools` param) → model responds with `<tool_call>` tags → `parse_tool_calls` extracts & normalizes → tool executor runs the tool → result sent back as `<tool_response>` → model generates follow-up (up to 6 rounds). In production, `ws_handler.py` passes `STORYBOOK_TOOLS` + a `tool_executor` closure that lazily creates a storybook and delegates to `execute_storybook_tool()`. An auto-nudge mechanism re-prompts the model if it narrates intent without calling a tool after a tool response.
+**Tool use flow** (v3.5): `build_system_prompt()` injects `<tools>` JSON into system prompt (accepts custom tool defs via `tools` param) → model responds with `<tool_call>` tags → `parse_tool_calls` extracts & normalizes → tool executor runs the tool → result sent back as `<tool_response>` → model generates follow-up (up to 6 rounds). In production, `ws_handler.py` passes `STORYBOOK_TOOLS` + a `tool_executor` closure that lazily creates a storybook and delegates to `execute_storybook_tool()`. An auto-nudge mechanism re-prompts the model if it narrates intent without calling a tool after a tool response. Tool responses sent back to the model are text-only (scene IDs, titles, status) — asset URLs are delivered to the frontend via `send_event` instead.
 
 **Storybook creation flow** (voice-driven, multi-turn):
 1. User describes a story via voice → model calls `generate_script` → storybook + scenes created in DB → `scene_add` events sent to frontend
@@ -66,8 +66,8 @@ uv run pytest tests/test_integration.py::TestSafeEvalMath::test_basic_addition -
 - `backend/main.py` — FastAPI app, mounts `/assets` static files, exposes `/ws` WebSocket and `/health`
 - `backend/ws_handler.py` — WebSocket endpoint: session init, `tool_executor` closure with lazy storybook creation, routes `audio_data`/`text_message` to `VoiceAgent`
 - `backend/ws_protocol.py` — Message type enums (`ClientMessageType`, `ServerMessageType` incl. `STORYBOOK_CREATED`), encode/decode helpers
-- `backend/voice_agent.py` — Async `VoiceAgent` class: streaming responses, multi-turn history, tool call loop with auto-nudge, custom tools injection via `tools` param
-- `backend/storybook_tools.py` — Async tool executors (script, image, audio, video, edit) with DB persistence
+- `backend/voice_agent.py` — Async `VoiceAgent` class: streaming responses, multi-turn history with sliding-window truncation (`MAX_HISTORY_MESSAGES=20`), tool call loop with auto-nudge, custom tools injection via `tools` param
+- `backend/storybook_tools.py` — Async tool executors (script, image, audio, video, edit) with DB persistence; returns text-only results to model (no asset URLs)
 - `backend/db.py` — Async SQLite layer (sessions, storybooks, scenes, messages) via `aiosqlite`
 - `backend/asset_storage.py` — Save/serve generated assets on local filesystem
 - `backend/config.py` — Env vars, paths (`ASSETS_DIR`, `DB_PATH`), `BACKEND_PORT`
@@ -75,8 +75,10 @@ uv run pytest tests/test_integration.py::TestSafeEvalMath::test_basic_addition -
 - `bosonUtil/api.py` — API config constants, `build_messages()`, and `predict()` for one-shot calls
 - `bosonUtil/tools.py` — Tool definitions, `<tool_call>` tag parsing (handles array/object/nested formats), `build_system_prompt()` with custom tools param, safe math eval
 - `frontend/app/lib/wsClient.ts` — `WSClient` class: WebSocket connection with auto-reconnect
-- `frontend/app/hooks/useAgent.ts` — React hook: connects WSClient, dispatches server messages to stores
+- `frontend/app/hooks/useAgent.ts` — React hook: connects WSClient, dispatches server messages to stores, clears old scenes on new storybook
 - `frontend/app/hooks/useAudioRecorder.ts` — React hook: browser mic → 16kHz PCM WAV → base64
+- `frontend/app/components/SceneEditor.tsx` — Scene thumbnail grid; prefers `<video>` over `<img>` when `videoUrl` exists
+- `frontend/app/components/PlayerOverlay.tsx` — Full-screen cinematic player with crossfade; prefers `<video>` over `<img>` when `videoUrl` exists
 - `assistant.py` — Standalone CLI demo of the voice agent (not the production entry point)
 
 ## HiggsAudioM3 API Specs
