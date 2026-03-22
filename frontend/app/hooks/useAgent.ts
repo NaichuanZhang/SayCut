@@ -48,6 +48,14 @@ export function useAgent(storybookId?: string) {
       switch (msg.type) {
         case "session_created":
           sessionIdRef.current = msg.session_id as string;
+          try {
+            sessionStorage.setItem(
+              `saycut-session-${storybookId ?? "new"}`,
+              msg.session_id as string,
+            );
+          } catch {
+            // sessionStorage may be unavailable in some contexts
+          }
           console.debug("[SayCut] Session created:", sessionIdRef.current);
           // If resuming an existing storybook, tell the backend
           if (storybookId) {
@@ -147,6 +155,7 @@ export function useAgent(storybookId?: string) {
           const sceneId = msg.scene_id as string;
           const field = msg.field as string;
           const value = msg.value as string;
+          console.debug("[SayCut] scene_update:", { sceneId, field });
 
           if (field === "imageUrl") {
             updateSceneImage(sceneId, prefixAssetUrl(value) ?? value);
@@ -191,8 +200,16 @@ export function useAgent(storybookId?: string) {
     client.connect(handleMessage);
 
     // Give the WebSocket a moment to connect, then init session
+    let savedSessionId: string | null = null;
+    try {
+      savedSessionId = sessionStorage.getItem(
+        `saycut-session-${storybookId ?? "new"}`,
+      );
+    } catch {
+      // sessionStorage may be unavailable
+    }
     const timer = setTimeout(() => {
-      client.sendSessionInit();
+      client.sendSessionInit(savedSessionId ?? undefined);
     }, 500);
 
     return () => {

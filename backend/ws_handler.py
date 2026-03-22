@@ -6,8 +6,10 @@ import logging
 from fastapi import WebSocket, WebSocketDisconnect
 
 from backend.db import (
+    create_message,
     create_session,
     create_storybook,
+    get_messages_by_session,
     get_scenes_by_storybook,
     get_session,
     get_storybook,
@@ -47,6 +49,9 @@ async def websocket_endpoint(websocket: WebSocket):
     session_id: str | None = None
     storybook_id: str | None = None
     db = await init_db(DB_PATH)
+
+    async def _save_message(sid: str, role: str, text: str) -> None:
+        await create_message(db, sid, role, text)
 
     async def _tool_executor(name: str, args: dict, send_event) -> dict:
         nonlocal storybook_id
@@ -108,6 +113,13 @@ async def websocket_endpoint(websocket: WebSocket):
                     existing = await get_session(db, requested_id)
                     if existing:
                         session_id = requested_id
+                        # Restore conversation history if agent doesn't have it
+                        agent = get_agent()
+                        if session_id not in agent._histories:
+                            messages = await get_messages_by_session(db, session_id)
+                            if messages:
+                                agent.restore_history(session_id, messages)
+                                logger.info("Restored %d messages for session %s", len(messages), session_id)
                     else:
                         session_id = await create_session(db)
                 else:
@@ -168,6 +180,7 @@ async def websocket_endpoint(websocket: WebSocket):
                         text=text,
                         send_event=send_event,
                         tool_executor=_tool_executor,
+                        save_message=_save_message,
                     )
                 except Exception:
                     logger.exception("Error processing text message")
@@ -199,6 +212,7 @@ async def websocket_endpoint(websocket: WebSocket):
                         audio_bytes=audio_bytes,
                         send_event=send_event,
                         tool_executor=_tool_executor,
+                        save_message=_save_message,
                     )
                 except Exception:
                     logger.exception("Error processing audio data")

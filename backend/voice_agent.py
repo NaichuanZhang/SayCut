@@ -7,6 +7,9 @@ import tempfile
 import uuid
 from typing import Callable, Awaitable
 
+# Type for an optional async callback to persist messages
+SaveMessage = Callable[[str, str, str], Awaitable[None]] | None
+
 logger = logging.getLogger(__name__)
 
 from openai import AsyncOpenAI
@@ -102,6 +105,12 @@ class VoiceAgent:
             "regenerate images, add audio, or make any other changes.",
         })
 
+    def restore_history(self, session_id: str, db_messages: list[dict]) -> None:
+        """Restore conversation history from persisted DB messages."""
+        history = self._ensure_history(session_id)
+        for msg in db_messages:
+            history.append({"role": msg["role"], "content": msg["text"]})
+
     def _trim_history(self, history: list[dict]) -> list[dict]:
         """Return a trimmed copy of history: system prompt + last MAX_HISTORY_MESSAGES."""
         if len(history) <= MAX_HISTORY_MESSAGES + 1:
@@ -149,6 +158,8 @@ class VoiceAgent:
         history: list[dict],
         send_event: SendEvent,
         tool_executor: Callable | None = None,
+        save_message: SaveMessage = None,
+        session_id: str = "",
     ) -> str:
         """Process tool calls in the response, up to MAX_TOOL_CALLS_PER_TURN rounds."""
         did_execute_tool = False
@@ -164,12 +175,14 @@ class VoiceAgent:
                 # Nudge it once to continue the workflow.
                 did_execute_tool = False
                 logger.info("Nudging model to continue tool workflow")
-                history.append({
-                    "role": "user",
-                    "content": "Continue — call the next tool(s) now.",
-                })
+                nudge = "Continue — call the next tool(s) now."
+                history.append({"role": "user", "content": nudge})
+                if save_message:
+                    await save_message(session_id, "user", nudge)
                 response_text = await self._stream_and_collect(history, send_event)
                 history.append({"role": "assistant", "content": response_text})
+                if save_message:
+                    await save_message(session_id, "assistant", response_text)
                 continue
 
             logger.info("Tool call round %d: %d calls detected", round_num + 1, len(tool_calls))
@@ -194,12 +207,16 @@ class VoiceAgent:
 
                 tool_response = f"<tool_response>{json.dumps(result)}</tool_response>"
                 history.append({"role": "user", "content": tool_response})
+                if save_message:
+                    await save_message(session_id, "user", tool_response)
 
             did_execute_tool = True
 
             # Get follow-up response
             response_text = await self._stream_and_collect(history, send_event)
             history.append({"role": "assistant", "content": response_text})
+            if save_message:
+                await save_message(session_id, "assistant", response_text)
 
         return response_text
 
@@ -209,6 +226,7 @@ class VoiceAgent:
         text: str,
         send_event: SendEvent,
         tool_executor: Callable | None = None,
+        save_message: SaveMessage = None,
     ) -> str:
         """Process a text input and stream the response."""
         history = self._ensure_history(session_id)
@@ -217,13 +235,18 @@ class VoiceAgent:
         await send_event("agent_thinking")
 
         history.append({"role": "user", "content": text})
+        if save_message:
+            await save_message(session_id, "user", text)
 
         response_text = await self._stream_and_collect(history, send_event)
         history.append({"role": "assistant", "content": response_text})
+        if save_message:
+            await save_message(session_id, "assistant", response_text)
 
         if self._tools_enabled:
             response_text = await self._handle_tool_calls(
-                response_text, history, send_event, tool_executor
+                response_text, history, send_event, tool_executor,
+                save_message=save_message, session_id=session_id,
             )
 
         return response_text
@@ -234,6 +257,7 @@ class VoiceAgent:
         audio_bytes: bytes,
         send_event: SendEvent,
         tool_executor: Callable | None = None,
+        save_message: SaveMessage = None,
     ) -> str:
         """Process audio bytes through the VAD pipeline and stream the response."""
         from bosonUtil.audio import chunk_audio_file
@@ -265,13 +289,18 @@ class VoiceAgent:
             for i, chunk_b64 in enumerate(audio_chunks)
         ]
         history.append({"role": "user", "content": user_content})
+        if save_message:
+            await save_message(session_id, "user", "[audio input]")
 
         response_text = await self._stream_and_collect(history, send_event)
         history.append({"role": "assistant", "content": response_text})
+        if save_message:
+            await save_message(session_id, "assistant", response_text)
 
         if self._tools_enabled:
             response_text = await self._handle_tool_calls(
-                response_text, history, send_event, tool_executor
+                response_text, history, send_event, tool_executor,
+                save_message=save_message, session_id=session_id,
             )
 
         return response_text
