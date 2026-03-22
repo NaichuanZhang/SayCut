@@ -11,6 +11,7 @@ interface StorybookStore {
   updateSceneTTS: (sceneId: string, audioUrl: string) => void;
   updateSceneStatus: (sceneId: string, status: Scene["status"]) => void;
   updateSceneNarration: (sceneId: string, narrationText: string) => void;
+  loadScenes: (scenes: readonly Scene[]) => void;
   clear: () => void;
 }
 
@@ -56,6 +57,8 @@ export const useStorybookStore = create<StorybookStore>((set) => ({
         s.id === sceneId ? { ...s, narrationText } : s,
       ),
     })),
+
+  loadScenes: (scenes) => set({ scenes }),
 
   clear: () => set({ storybookId: null, scenes: [] }),
 }));

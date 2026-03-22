@@ -5,7 +5,14 @@ import logging
 
 from fastapi import WebSocket, WebSocketDisconnect
 
-from backend.db import create_session, create_storybook, get_session, init_db
+from backend.db import (
+    create_session,
+    create_storybook,
+    get_scenes_by_storybook,
+    get_session,
+    get_storybook,
+    init_db,
+)
 from backend.config import ASSETS_DIR, DB_PATH
 from backend.storybook_tools import STORYBOOK_TOOLS, execute_storybook_tool
 from backend.voice_agent import VoiceAgent, STORYBOOK_SYSTEM_PROMPT
@@ -112,6 +119,38 @@ async def websocket_endpoint(websocket: WebSocket):
                         ServerMessageType.SESSION_CREATED, session_id=session_id
                     )
                 )
+
+            elif msg_type == ClientMessageType.LOAD_STORYBOOK:
+                requested_storybook_id = payload.get("storybook_id")
+                if not requested_storybook_id:
+                    await websocket.send_text(
+                        encode_server_message(
+                            ServerMessageType.ERROR, message="Missing storybook_id"
+                        )
+                    )
+                    continue
+                sb = await get_storybook(db, requested_storybook_id)
+                if sb is None:
+                    await websocket.send_text(
+                        encode_server_message(
+                            ServerMessageType.ERROR, message="Storybook not found"
+                        )
+                    )
+                    continue
+                storybook_id = requested_storybook_id
+                # Inject context into the voice agent so it knows about the existing storybook
+                scenes = await get_scenes_by_storybook(db, storybook_id)
+                scene_titles = ", ".join(
+                    f'Scene {s["idx"] + 1}: "{s["title"]}"' for s in scenes
+                )
+                context = (
+                    f'Previously, you created a storybook titled "{sb["title"]}" '
+                    f"with {len(scenes)} scenes: {scene_titles}. "
+                    "The user is resuming work on this storybook."
+                )
+                agent = get_agent()
+                agent.inject_context(session_id, context)
+                logger.info("Loaded storybook %s for session %s", storybook_id, session_id)
 
             elif msg_type == ClientMessageType.TEXT_MESSAGE:
                 text = payload.get("text", "")

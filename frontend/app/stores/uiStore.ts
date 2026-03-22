@@ -9,7 +9,7 @@ interface UIStore {
   readonly isAgentPanelOpen: boolean;
   setAgentState: (state: AgentState) => void;
   setRecording: (val: boolean) => void;
-  selectScene: (id: string) => void;
+  selectScene: (id: string | null) => void;
   openPlayer: () => void;
   closePlayer: () => void;
   toggleAgentPanel: () => void;

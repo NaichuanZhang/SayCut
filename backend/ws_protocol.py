@@ -20,6 +20,7 @@ class ServerMessageType(str, Enum):
 
 class ClientMessageType(str, Enum):
     SESSION_INIT = "session_init"
+    LOAD_STORYBOOK = "load_storybook"
     AUDIO_DATA = "audio_data"
     TEXT_MESSAGE = "text_message"
 

@@ -43,6 +43,8 @@ uv run pytest tests/test_integration.py::TestSafeEvalMath::test_basic_addition -
 
 **Stack**: Next.js frontend → FastAPI backend → BosonAI + EigenAI APIs. Generated assets stored on local filesystem.
 
+**Routes**: `/` — projects listing page; `/project/new` — new storybook editor; `/project/[id]` — resume editing existing storybook (hydrates scenes from REST, connects fresh WS session with `LOAD_STORYBOOK` to inject context into voice agent).
+
 **Production data flow**: Browser mic → `useAudioRecorder` (16kHz PCM → WAV → base64) → `useAgent` → `WSClient` (WebSocket) → `ws_handler.py` → `VoiceAgent` → `audio.py` (VAD → 4s chunks) → BosonAI API → streamed response → WebSocket events → frontend stores
 
 **Tool use flow** (v3.5): `build_system_prompt()` injects `<tools>` JSON into system prompt (accepts custom tool defs via `tools` param) → model responds with `<tool_call>` tags → `parse_tool_calls` extracts & normalizes → tool executor runs the tool → result sent back as `<tool_response>` → model generates follow-up (up to 6 rounds). In production, `ws_handler.py` passes `STORYBOOK_TOOLS` + a `tool_executor` closure that lazily creates a storybook and delegates to `execute_storybook_tool()`. An auto-nudge mechanism re-prompts the model if it narrates intent without calling a tool after a tool response. Tool responses sent back to the model are text-only (scene IDs, titles, status) — asset URLs are delivered to the frontend via `send_event` instead.
@@ -63,20 +65,23 @@ uv run pytest tests/test_integration.py::TestSafeEvalMath::test_basic_addition -
 - Text-to-Speech: `higgs2p5` via EigenAI (`data.eigenai.com`, WebSocket streaming)
 
 **Key modules**:
-- `backend/main.py` — FastAPI app, mounts `/assets` static files, exposes `/ws` WebSocket and `/health`
-- `backend/ws_handler.py` — WebSocket endpoint: session init, `tool_executor` closure with lazy storybook creation, routes `audio_data`/`text_message` to `VoiceAgent`
-- `backend/ws_protocol.py` — Message type enums (`ClientMessageType`, `ServerMessageType` incl. `STORYBOOK_CREATED`), encode/decode helpers
-- `backend/voice_agent.py` — Async `VoiceAgent` class: streaming responses, multi-turn history with sliding-window truncation (`MAX_HISTORY_MESSAGES=20`), tool call loop with auto-nudge, custom tools injection via `tools` param
+- `backend/main.py` — FastAPI app, mounts `/assets` static files, exposes `/ws` WebSocket, `/health`, and REST endpoints `GET /api/storybooks` (list) and `GET /api/storybooks/{id}` (detail with scenes)
+- `backend/ws_handler.py` — WebSocket endpoint: session init, `load_storybook` (resume existing), `tool_executor` closure with lazy storybook creation, routes `audio_data`/`text_message` to `VoiceAgent`
+- `backend/ws_protocol.py` — Message type enums (`ClientMessageType` incl. `LOAD_STORYBOOK`, `ServerMessageType` incl. `STORYBOOK_CREATED`), encode/decode helpers
+- `backend/voice_agent.py` — Async `VoiceAgent` class: streaming responses, multi-turn history with sliding-window truncation (`MAX_HISTORY_MESSAGES=20`), tool call loop with auto-nudge, custom tools injection via `tools` param, `inject_context()` for resumed storybooks
 - `backend/storybook_tools.py` — Async tool executors (script, image, audio, video, edit) with DB persistence; returns text-only results to model (no asset URLs)
-- `backend/db.py` — Async SQLite layer (sessions, storybooks, scenes, messages) via `aiosqlite`
+- `backend/db.py` — Async SQLite layer (sessions, storybooks, scenes, messages) via `aiosqlite`; includes `list_storybooks()` and `get_storybook_with_scenes()` for REST endpoints
 - `backend/asset_storage.py` — Save/serve generated assets on local filesystem
 - `backend/config.py` — Env vars, paths (`ASSETS_DIR`, `DB_PATH`), `BACKEND_PORT`
 - `bosonUtil/audio.py` — Audio chunking pipeline; VAD model is cached as a module-level singleton
 - `bosonUtil/api.py` — API config constants, `build_messages()`, and `predict()` for one-shot calls
 - `bosonUtil/tools.py` — Tool definitions, `<tool_call>` tag parsing (handles array/object/nested formats), `build_system_prompt()` with custom tools param, safe math eval
-- `frontend/app/lib/wsClient.ts` — `WSClient` class: WebSocket connection with auto-reconnect
-- `frontend/app/hooks/useAgent.ts` — React hook: connects WSClient, dispatches server messages to stores, clears old scenes on new storybook
+- `frontend/app/lib/wsClient.ts` — `WSClient` class: WebSocket connection with auto-reconnect, `sendLoadStorybook()` for resume flow
+- `frontend/app/lib/api.ts` — REST client: `fetchStorybooks()` and `fetchStorybook(id)` for the projects page and editor hydration
+- `frontend/app/lib/editorContext.ts` — React context to pass `storybookId` down to `useAgent` via `VoiceOrb`
+- `frontend/app/hooks/useAgent.ts` — React hook: connects WSClient, dispatches server messages to stores; accepts optional `storybookId` to send `LOAD_STORYBOOK` on resume
 - `frontend/app/hooks/useAudioRecorder.ts` — React hook: browser mic → 16kHz PCM WAV → base64
+- `frontend/app/components/ProjectCard.tsx` — Card component for projects listing: thumbnail, title, scene count, relative date
 - `frontend/app/components/SceneEditor.tsx` — Scene thumbnail grid; prefers `<video>` over `<img>` when `videoUrl` exists
 - `frontend/app/components/PlayerOverlay.tsx` — Full-screen cinematic player with crossfade; prefers `<video>` over `<img>` when `videoUrl` exists
 - `assistant.py` — Standalone CLI demo of the voice agent (not the production entry point)

@@ -1,6 +1,7 @@
 "use client";
 
 import clsx from "clsx";
+import Link from "next/link";
 import { useUIStore } from "../stores/uiStore";
 import { ActivityLog } from "./ActivityLog";
 import { VoiceOrb } from "./VoiceOrb";
@@ -48,6 +49,21 @@ export function AgentPanel() {
       >
         {/* Header */}
         <div className="flex items-center gap-2 px-4 py-3 border-b border-border-subtle">
+          <Link
+            href="/"
+            className="text-text-muted hover:text-text-primary transition-colors mr-1"
+            title="Back to projects"
+          >
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+              <path
+                d="M10 3L5 8L10 13"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+          </Link>
           <SayCutLogo size="sm" variant="full" />
           <span className="ml-auto flex items-center gap-1.5">
             <div

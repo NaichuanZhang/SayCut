@@ -91,6 +91,17 @@ class VoiceAgent:
     def get_history(self, session_id: str) -> list[dict]:
         return list(self._histories.get(session_id, []))
 
+    def inject_context(self, session_id: str, context_text: str) -> None:
+        """Inject a context message into the session history for resumed storybooks."""
+        history = self._ensure_history(session_id)
+        history.append({"role": "user", "content": context_text})
+        history.append({
+            "role": "assistant",
+            "content": "Got it! I can see the storybook you created earlier. "
+            "How would you like to continue? I can help you edit scenes, "
+            "regenerate images, add audio, or make any other changes.",
+        })
+
     def _trim_history(self, history: list[dict]) -> list[dict]:
         """Return a trimmed copy of history: system prompt + last MAX_HISTORY_MESSAGES."""
         if len(history) <= MAX_HISTORY_MESSAGES + 1:

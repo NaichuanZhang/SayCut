@@ -16,7 +16,7 @@ function prefixAssetUrl(url: string | null): string | null {
   return `${BACKEND_URL}${url}`;
 }
 
-export function useAgent() {
+export function useAgent(storybookId?: string) {
   const clientRef = useRef<WSClient | null>(null);
   const sessionIdRef = useRef<string | null>(null);
   const isProcessing = useRef(false);
@@ -49,10 +49,17 @@ export function useAgent() {
         case "session_created":
           sessionIdRef.current = msg.session_id as string;
           console.debug("[SayCut] Session created:", sessionIdRef.current);
+          // If resuming an existing storybook, tell the backend
+          if (storybookId) {
+            clientRef.current?.sendLoadStorybook(storybookId);
+          }
           break;
 
         case "storybook_created":
-          clear();
+          // Don't clear scenes if we're resuming — they were loaded from REST
+          if (!storybookId) {
+            clear();
+          }
           setStorybookId(msg.storybook_id as string);
           firstSceneAdded.current = false;
           console.debug("[SayCut] Storybook created:", msg.storybook_id);
@@ -174,6 +181,7 @@ export function useAgent() {
       updateSceneTTS,
       updateSceneStatus,
       selectScene,
+      storybookId,
     ],
   );
 

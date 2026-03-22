@@ -2,6 +2,7 @@
 
 export type ServerMessageType =
   | "session_created"
+  | "storybook_created"
   | "agent_thinking"
   | "agent_stream_start"
   | "agent_stream_chunk"
@@ -102,6 +103,10 @@ export class WSClient {
 
   sendTextMessage(text: string): void {
     this.send({ type: "text_message", text });
+  }
+
+  sendLoadStorybook(storybookId: string): void {
+    this.send({ type: "load_storybook", storybook_id: storybookId });
   }
 
   disconnect(): void {

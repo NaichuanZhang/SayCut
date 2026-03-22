@@ -162,3 +162,30 @@ async def get_messages_by_session(
         (session_id,),
     )
     return [dict(row) for row in await cursor.fetchall()]
+
+
+async def list_storybooks(db: aiosqlite.Connection) -> list[dict]:
+    """List all storybooks with thumbnail and scene count, newest first."""
+    cursor = await db.execute(
+        """
+        SELECT s.id, s.session_id, s.title, s.created_at,
+               (SELECT sc.image_path FROM scenes sc
+                WHERE sc.storybook_id = s.id ORDER BY sc.idx LIMIT 1) as thumbnail_path,
+               (SELECT COUNT(*) FROM scenes sc
+                WHERE sc.storybook_id = s.id) as scene_count
+        FROM storybooks s
+        ORDER BY s.created_at DESC
+        """
+    )
+    return [dict(row) for row in await cursor.fetchall()]
+
+
+async def get_storybook_with_scenes(
+    db: aiosqlite.Connection, storybook_id: str
+) -> dict | None:
+    """Return a storybook with its scenes, or None if not found."""
+    storybook = await get_storybook(db, storybook_id)
+    if storybook is None:
+        return None
+    scenes = await get_scenes_by_storybook(db, storybook_id)
+    return {**storybook, "scenes": scenes}

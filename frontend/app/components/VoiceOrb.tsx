@@ -6,6 +6,7 @@ import clsx from "clsx";
 import { useUIStore } from "../stores/uiStore";
 import { useAudioRecorder } from "../hooks/useAudioRecorder";
 import { useAgent } from "../hooks/useAgent";
+import { useEditorContext } from "../lib/editorContext";
 import { VoiceWaveform } from "./VoiceWaveform";
 
 interface VoiceOrbProps {
@@ -45,7 +46,8 @@ export function VoiceOrb({ compact = false }: VoiceOrbProps) {
   const setAgentState = useUIStore((s) => s.setAgentState);
   const { startRecording, stopRecording, analyserNode, error } =
     useAudioRecorder();
-  const { sendAudio } = useAgent();
+  const { storybookId } = useEditorContext();
+  const { sendAudio } = useAgent(storybookId);
 
   const handleClick = useCallback(async () => {
     if (agentState === "thinking" || agentState === "speaking") return;
