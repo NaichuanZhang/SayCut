@@ -6,7 +6,6 @@ Tests marked @pytest.mark.integration require BOSONAI_API_KEY to be set.
 
 import json
 import os
-import re
 import subprocess
 import tempfile
 
@@ -119,6 +118,31 @@ class TestParseToolCalls:
     def test_malformed_json_skipped(self):
         text = "<tool_call>not json</tool_call>"
         assert parse_tool_calls(text) == []
+
+    def test_truncated_tool_call(self):
+        """Truncated tool call (no closing tag) is recovered."""
+        text = '<tool_call>{"name":"generate_script","arguments":{"story_prompt":"a kitten"}'
+        calls = parse_tool_calls(text)
+        assert len(calls) == 1
+        assert calls[0]["name"] == "generate_script"
+        assert calls[0]["arguments"] == {"story_prompt": "a kitten"}
+
+    def test_truncated_tool_call_missing_brace(self):
+        """Truncated JSON with missing closing brace is recovered."""
+        text = '<tool_call>{"name":"calculate","arguments":{"expression":"2+2"}'
+        calls = parse_tool_calls(text)
+        assert len(calls) == 1
+        assert calls[0]["name"] == "calculate"
+
+    def test_truncated_not_preferred_over_complete(self):
+        """Complete tool calls take priority over truncated ones."""
+        text = (
+            '<tool_call>{"name":"calculate","arguments":{"expression":"1+1"}}</tool_call>'
+            ' trailing <tool_call>{"name":"broken"'
+        )
+        calls = parse_tool_calls(text)
+        assert len(calls) == 1
+        assert calls[0]["name"] == "calculate"
 
 
 class TestBuildSystemPrompt:
@@ -253,31 +277,6 @@ def _chat(client, messages: list[dict], max_tokens: int = 2048) -> str:
     return (response.choices[0].message.content or "").strip()
 
 
-_PARTIAL_TOOL_CALL_RE = re.compile(r"<tool_call>(.*?)$", re.DOTALL)
-
-
-def _parse_tool_calls_lenient(text: str) -> list[dict]:
-    """Like parse_tool_calls but also handles truncated tool calls (missing closing tag)."""
-    calls = parse_tool_calls(text)
-    if calls:
-        return calls
-    # Try to extract a partial tool call (truncated before </tool_call>)
-    match = _PARTIAL_TOOL_CALL_RE.search(text)
-    if not match:
-        return []
-    raw = match.group(1).strip()
-    # Try to parse as-is, then try adding closing braces
-    for suffix in ["", "}", '"}', '"}}', '"}]']:
-        try:
-            parsed = json.loads(raw + suffix)
-            items = parsed if isinstance(parsed, list) else [parsed]
-            from bosonUtil.tools import _normalize_tool_call
-            return [_normalize_tool_call(item) for item in items]
-        except (json.JSONDecodeError, KeyError):
-            continue
-    return []
-
-
 def _chat_until_tool_call(
     client, messages: list[dict], expected_tool: str, max_follow_ups: int = 2
 ) -> tuple[str, list[dict]]:
@@ -286,7 +285,7 @@ def _chat_until_tool_call(
     Returns (response_text_with_tool_call, tool_calls).
     """
     response_text = _chat(client, messages, max_tokens=4096)
-    tool_calls = _parse_tool_calls_lenient(response_text)
+    tool_calls = parse_tool_calls(response_text)
 
     for _ in range(max_follow_ups):
         if tool_calls:
@@ -298,13 +297,13 @@ def _chat_until_tool_call(
             {
                 "role": "user",
                 "content": (
-                    f"Please call the {expected_tool} tool now. "
-                    "Use <tool_call> tags with JSON arguments."
+                    f"Please call the {expected_tool} tool now for one scene only. "
+                    "Use <tool_call> tags with JSON arguments. Be concise."
                 ),
             },
         ]
         response_text = _chat(client, messages, max_tokens=4096)
-        tool_calls = _parse_tool_calls_lenient(response_text)
+        tool_calls = parse_tool_calls(response_text)
 
     return response_text, tool_calls
 
@@ -464,7 +463,7 @@ class TestStorybookScriptToolCall:
 class TestStorybookImageToolCall:
     def test_voice_triggers_generate_scene_image(self):
         """User says 'generate images' and model calls generate_scene_image."""
-        tmp_path = _say_to_wav("Generate images for the scenes")
+        tmp_path = _say_to_wav("Generate an image for the first scene")
         try:
             messages = _build_seeded_history()
             messages.append({"role": "user", "content": _audio_to_content_parts(tmp_path)})

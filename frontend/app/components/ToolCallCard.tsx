@@ -71,18 +71,17 @@ function ToolIcon({ toolName }: { toolName: string }) {
 export function ToolCallCard({ message }: ToolCallCardProps) {
   const toolName = message.toolName ?? "tool";
   const isComplete =
+    message.toolStatus === "done" ||
     message.toolStatus?.includes("ready") ||
-    message.toolStatus?.includes("Ready") ||
-    message.toolStatus?.includes("ready");
-  const isImageResult =
-    isComplete && toolName.includes("image");
+    message.toolStatus?.includes("Ready");
+  const isImageResult = isComplete && toolName.includes("image");
 
   return (
     <motion.div
       className={clsx(
         "rounded-lg bg-bg-elevated border border-border-subtle overflow-hidden",
         "border-l-[3px]",
-        isComplete ? "border-l-accent-green" : "border-l-accent-amber"
+        isComplete ? "border-l-accent-green" : "border-l-accent-amber",
       )}
       initial={{ opacity: 0, x: -12 }}
       animate={{ opacity: 1, x: 0 }}
@@ -93,7 +92,7 @@ export function ToolCallCard({ message }: ToolCallCardProps) {
         <div
           className={clsx(
             "mt-0.5 flex-shrink-0",
-            isComplete ? "text-accent-green" : "text-accent-amber"
+            isComplete ? "text-accent-green" : "text-accent-amber",
           )}
         >
           {isComplete ? (
@@ -120,7 +119,7 @@ export function ToolCallCard({ message }: ToolCallCardProps) {
           <p
             className={clsx(
               "text-xs mt-0.5",
-              isComplete ? "text-text-primary" : "text-accent-amber"
+              isComplete ? "text-text-primary" : "text-accent-amber",
             )}
           >
             {message.text}

@@ -46,8 +46,7 @@ STORYBOOK_SYSTEM_PROMPT = (
     "3. After all images are done, IMMEDIATELY call generate_scene_audio for ALL scenes.\n"
     "4. After all audio is done, IMMEDIATELY call generate_scene_video for ALL scenes.\n"
     "5. If the user asks to modify a scene's image, use edit_scene_image.\n"
-    "- To insert scenes between existing scenes, pass `insert_after_scene_id` to generate_script.\n"
-    "  If omitted, new scenes are appended at the end.\n\n"
+    "6. To insert scenes between existing ones, call generate_script with `insert_after_scene_id`.\n\n"
     "CRITICAL RULES:\n"
     "- When you decide to use a tool, you MUST include <tool_call> tags. Never just describe what you will do.\n"
     "- After receiving a <tool_response>, immediately call the next tool(s) — do not stop to chat.\n"
@@ -83,6 +82,10 @@ class VoiceAgent:
             system_prompt, tools_enabled, tools=tools
         )
         self._tools_enabled = tools_enabled
+        logger.info(
+            "VoiceAgent created, system_prompt_len=%d, has_tools=%s",
+            len(self._system_prompt), "<tools>" in self._system_prompt,
+        )
         # In-memory conversation history per session
         self._histories: dict[str, list[dict]] = {}
 
@@ -142,6 +145,8 @@ class VoiceAgent:
 
         stream = await self._create_stream(self._trim_history(messages))
         full_text = ""
+        finish_reason = None
+        has_tool_calls_field = False
         async for chunk in stream:
             delta = chunk.choices[0].delta
             if delta.content:
@@ -149,8 +154,15 @@ class VoiceAgent:
                 await send_event(
                     "agent_stream_chunk", message_id=message_id, text=delta.content
                 )
+            if getattr(delta, "tool_calls", None):
+                has_tool_calls_field = True
+            if chunk.choices[0].finish_reason:
+                finish_reason = chunk.choices[0].finish_reason
 
-        logger.debug("Streaming end, message_id=%s, length=%d", message_id, len(full_text))
+        logger.debug(
+            "Streaming end, message_id=%s, length=%d, finish_reason=%s, has_tool_calls_field=%s",
+            message_id, len(full_text), finish_reason, has_tool_calls_field,
+        )
         await send_event("agent_stream_end", message_id=message_id)
         return full_text.strip()
 

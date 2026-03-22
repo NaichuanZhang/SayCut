@@ -53,7 +53,7 @@ export const useConversationStore = create<ConversationStore>((set) => ({
   appendAgentChunk: (id, text) =>
     set((state) => ({
       messages: state.messages.map((m) =>
-        m.id === id ? { ...m, text: m.text + text } : m
+        m.id === id ? { ...m, text: m.text + text } : m,
       ),
     })),
 
@@ -61,24 +61,37 @@ export const useConversationStore = create<ConversationStore>((set) => ({
     set((state) => ({
       isStreaming: false,
       messages: state.messages.map((m) =>
-        m.id === id ? { ...m, isStreaming: false } : m
+        m.id === id ? { ...m, isStreaming: false } : m,
       ),
     })),
 
   addToolStatus: (name, status) =>
-    set((state) => ({
-      messages: [
-        ...state.messages,
-        {
-          id: makeId(),
-          role: "tool" as const,
-          text: status,
-          toolName: name,
-          toolStatus: status,
-          timestamp: Date.now(),
-        },
-      ],
-    })),
+    set((state) => {
+      const existingIdx = state.messages.findIndex(
+        (m) =>
+          m.role === "tool" && m.toolName === name && m.toolStatus !== "done",
+      );
+      if (existingIdx !== -1) {
+        return {
+          messages: state.messages.map((m, i) =>
+            i === existingIdx ? { ...m, text: status, toolStatus: status } : m,
+          ),
+        };
+      }
+      return {
+        messages: [
+          ...state.messages,
+          {
+            id: makeId(),
+            role: "tool" as const,
+            text: status,
+            toolName: name,
+            toolStatus: status,
+            timestamp: Date.now(),
+          },
+        ],
+      };
+    }),
 
   clear: () => set({ messages: [], isStreaming: false }),
 }));

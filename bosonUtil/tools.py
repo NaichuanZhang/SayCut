@@ -46,6 +46,7 @@ def execute_tool_call(name: str, args: dict) -> dict:
 
 
 _TOOL_CALL_RE = re.compile(r"<tool_call>(.*?)</tool_call>", re.DOTALL)
+_PARTIAL_TOOL_CALL_RE = re.compile(r"<tool_call>(.*?)$", re.DOTALL)
 
 
 def _normalize_tool_call(raw: dict) -> dict:
@@ -64,7 +65,7 @@ def _normalize_tool_call(raw: dict) -> dict:
 
 
 def parse_tool_calls(text: str) -> list[dict]:
-    """Extract tool call dicts from <tool_call> tags. Returns list of {name, arguments}."""
+    """Extract tool call dicts from <tool_call> tags. Handles truncated calls."""
     results = []
     for match in _TOOL_CALL_RE.finditer(text):
         try:
@@ -74,6 +75,22 @@ def parse_tool_calls(text: str) -> list[dict]:
         items = parsed if isinstance(parsed, list) else [parsed]
         for item in items:
             results.append(_normalize_tool_call(item))
+
+    if results:
+        return results
+
+    # Fallback: try to recover a truncated tool call (no closing tag)
+    partial = _PARTIAL_TOOL_CALL_RE.search(text)
+    if partial:
+        raw = partial.group(1).strip()
+        for suffix in ["", "}", '"}', '"}}', '"}]', '"}}}']:
+            try:
+                parsed = json.loads(raw + suffix)
+                items = parsed if isinstance(parsed, list) else [parsed]
+                return [_normalize_tool_call(item) for item in items]
+            except (json.JSONDecodeError, KeyError):
+                continue
+
     return results
 
 
