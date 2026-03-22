@@ -1,4 +1,4 @@
-"""EigenAI script generation client using gpt-oss-120b (OpenAI-compatible)."""
+"""EigenAI script generation client using kimi-k2-5 (OpenAI-compatible)."""
 
 from collections.abc import AsyncIterator
 
@@ -6,9 +6,8 @@ from openai import AsyncOpenAI
 
 from .eigen_config import EIGENAI_BASE_URL, resolve_eigenai_api_key
 
-DEFAULT_MODEL = "gpt-oss-120b"
+DEFAULT_MODEL = "kimi-k2-5"
 DEFAULT_TEMPERATURE = 0.7
-DEFAULT_REASONING_EFFORT = "medium"
 DEFAULT_MAX_TOKENS = 2000
 
 
@@ -17,7 +16,6 @@ async def generate_script(
     *,
     model: str = DEFAULT_MODEL,
     temperature: float = DEFAULT_TEMPERATURE,
-    reasoning_effort: str = DEFAULT_REASONING_EFFORT,
     max_tokens: int = DEFAULT_MAX_TOKENS,
     api_key: str | None = None,
 ) -> str:
@@ -29,7 +27,6 @@ async def generate_script(
         messages=messages,
         temperature=temperature,
         max_tokens=max_tokens,
-        extra_body={"reasoning_effort": reasoning_effort},
         stream=False,
     )
 
@@ -41,7 +38,6 @@ async def stream_script(
     *,
     model: str = DEFAULT_MODEL,
     temperature: float = DEFAULT_TEMPERATURE,
-    reasoning_effort: str = DEFAULT_REASONING_EFFORT,
     max_tokens: int = DEFAULT_MAX_TOKENS,
     api_key: str | None = None,
 ) -> AsyncIterator[str]:
@@ -53,7 +49,6 @@ async def stream_script(
         messages=messages,
         temperature=temperature,
         max_tokens=max_tokens,
-        extra_body={"reasoning_effort": reasoning_effort},
         stream=True,
     )
 

@@ -80,7 +80,7 @@ All models are served by **BosonAI** and **EigenAI** APIs:
 | Role | Model | Provider | Protocol |
 |------|-------|----------|----------|
 | Voice Agent (STT + tool calling) | `higgs-audio-understanding-v3.5-Hackathon` | BosonAI | OpenAI-compatible REST |
-| Script Generation | `gpt-oss-120b` | EigenAI | OpenAI-compatible REST |
+| Script Generation | `kimi-k2-5` | EigenAI | OpenAI-compatible REST |
 | Image Generation | `eigen-image` | EigenAI | REST |
 | Image Editing | `qwen-image-edit-2511` | EigenAI | REST, multipart upload |
 | Image-to-Video | `wan2p2-i2v-14b-turbo` | EigenAI | Async REST with polling |

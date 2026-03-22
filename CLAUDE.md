@@ -60,7 +60,7 @@ uv run pytest tests/test_integration.py::TestSafeEvalMath::test_basic_addition -
 
 **AI Models**:
 - Voice Agent (STT + tool calling): `higgs-audio-understanding-v3.5-Hackathon` via BosonAI (`hackathon.boson.ai/v1`)
-- Script Generation: `gpt-oss-120b` via EigenAI (`api-web.eigenai.com`, OpenAI-compatible)
+- Script Generation: `kimi-k2-5` via EigenAI (`api-web.eigenai.com`, OpenAI-compatible)
 - Image Generation: `eigen-image` via EigenAI (`api-web.eigenai.com`)
 - Image Editing: `qwen-image-edit-2511` via EigenAI (multipart upload, up to 9 source images)
 - Image-to-Video: `wan2p2-i2v-14b-turbo` via EigenAI (async: submit → poll → download MP4)
