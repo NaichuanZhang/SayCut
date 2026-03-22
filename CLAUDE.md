@@ -85,19 +85,44 @@ uv run pytest tests/test_integration.py::TestSafeEvalMath::test_basic_addition -
 - `backend/db.py` — Async SQLite layer (sessions, storybooks, scenes, messages) via `aiosqlite`; includes `shift_scene_indices()` for scene insertion, `delete_scene()` for removal with index compaction, `list_storybooks()` and `get_storybook_with_scenes()` for REST endpoints
 - `backend/asset_storage.py` — Save/serve/delete generated assets on local filesystem
 - `backend/config.py` — Env vars, paths (`ASSETS_DIR`, `DB_PATH`), `BACKEND_PORT`
+- `backend/models.py` — Pydantic models for DB records (SessionRecord, StorybookRecord, SceneRecord, MessageRecord)
 - `bosonUtil/audio_concat.py` — WAV concatenation utility for multi-voice dialogue: normalizes to 24kHz/16-bit/mono, inserts configurable silence gaps between segments
 - `bosonUtil/audio.py` — Audio chunking pipeline; VAD model is cached as a module-level singleton
 - `bosonUtil/api.py` — API config constants, `build_messages()`, and `predict()` for one-shot calls
 - `bosonUtil/tools.py` — Tool definitions, `<tool_call>` tag parsing (handles array/object/nested formats + truncated calls), `build_system_prompt()` with custom tools param, safe math eval
+- `bosonUtil/eigen_config.py` — Shared EigenAI API config (base URL, auth headers, key resolution)
+- `bosonUtil/eigen_script.py` — Script generation client via kimi-k2-5 (`generate_script`, `stream_script`)
+- `bosonUtil/eigen_tts.py` — TTS client with `MORGAN_FREEMAN_VOICE_ID` constant, WebSocket streaming
+- `bosonUtil/eigen_image_gen.py` — Image generation client (eigen-image model)
+- `bosonUtil/eigen_image_edit.py` — Image editing client (qwen-image-edit-2511, multipart upload)
+- `bosonUtil/eigen_i2v.py` — Image-to-video client (wan2p2-i2v-14b-turbo, async poll)
+- `frontend/app/lib/types.ts` — TypeScript types: Scene, Message, Storybook, StoryMode, DialogueLine, CharacterConfig
 - `frontend/app/lib/wsClient.ts` — `WSClient` class: WebSocket connection with auto-reconnect, `sendLoadStorybook()` for resume flow
 - `frontend/app/lib/api.ts` — REST client: `fetchStorybooks()`, `fetchStorybook(id)`, and `fetchMessages(id)` for projects page, editor hydration, and conversation history
 - `frontend/app/lib/editorContext.ts` — React context to pass `storybookId` down to `useAgent` via `VoiceOrb`
+- `frontend/app/lib/stripToolCalls.ts` — Utility to strip `<tool_call>` tags from agent text for display
+- `frontend/app/stores/conversationStore.ts` — Zustand store: conversation messages, streaming state, tool status with scene binding
+- `frontend/app/stores/storybookStore.ts` — Zustand store: scenes array, mode, characters
+- `frontend/app/stores/uiStore.ts` — Zustand store: UI state (sidebar, overlays)
 - `frontend/app/hooks/useAgent.ts` — React hook: connects WSClient, dispatches server messages to stores; accepts optional `storybookId` to send `LOAD_STORYBOOK` on resume, `projectMode`/`projectCharacters` to send `SET_PROJECT_MODE` on init
 - `frontend/app/hooks/useAudioRecorder.ts` — React hook: browser mic → 16kHz PCM WAV → base64
+- `frontend/app/hooks/useAudioPlayback.ts` — React hook for audio playback control
+- `frontend/app/hooks/useWaveformAnalyser.ts` — React hook for Web Audio API waveform analysis
+- `frontend/app/components/Workspace.tsx` — Main layout composing AgentPanel + SceneEditor
+- `frontend/app/components/AgentPanel.tsx` — Chat panel: message list + tool call cards + voice orb
+- `frontend/app/components/MessageBubble.tsx` — Message bubble renderer (user/agent roles)
+- `frontend/app/components/ToolCallCard.tsx` — Tool execution card: status, progress bar, scene image thumbnail
 - `frontend/app/components/ProjectCard.tsx` — Card component for projects listing: thumbnail, title, scene count, relative date
 - `frontend/app/components/ModeSelector.tsx` — Mode selection screen for new projects: Story vs Movie cards, character name/voice config for movie mode, voice sample preview
 - `frontend/app/components/SceneEditor.tsx` — Scene thumbnail grid; renders dialogue lines (movie) or narration textarea (story); prefers `<video>` over `<img>` when `videoUrl` exists
+- `frontend/app/components/SceneCard.tsx` — Individual scene card in editor grid
+- `frontend/app/components/SceneStrip.tsx` — Horizontal scene thumbnail strip/timeline
 - `frontend/app/components/PlayerOverlay.tsx` — Full-screen cinematic player with crossfade; shows stacked dialogue subtitles (movie) or single narration text (story); plays narration audio alongside looping video, advances scenes on audio `ended` event (falls back to 6s timer when no `audioUrl`); prefers `<video>` over `<img>` when `videoUrl` exists
+- `frontend/app/components/VoiceOrb.tsx` — Toggle-click voice input (tap to start/stop recording)
+- `frontend/app/components/VoiceWaveform.tsx` — Real-time waveform visualization
+- `frontend/app/components/SayCutLogo.tsx` — Logo component (size: sm/md/lg/xl, variant: full/mark/wordmark)
+- `frontend/app/components/StatusPill.tsx` — Agent status indicator pill
+- `frontend/app/components/ActivityLog.tsx` — Activity log display
 - `assistant.py` — Standalone CLI demo of the voice agent (not the production entry point)
 
 ## HiggsAudioM3 API Specs

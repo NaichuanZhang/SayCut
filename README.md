@@ -8,6 +8,12 @@ SayCut supports two creation modes:
 - **Story mode** — Single narrator with narration text per scene, single TTS voice
 - **Movie mode** — 2-person conversational scripts with dialogue lines per scene, 3 voices (Narrator via Morgan Freeman clone + 2 characters), multi-voice TTS via WAV concatenation
 
+## Screenshots
+
+| Projects | Editor | Mode Selection |
+|----------|--------|----------------|
+| ![Projects](docs/screenshots/projects.png) | ![Editor](docs/screenshots/editor.png) | ![Mode Selection](docs/screenshots/mode-selector.png) |
+
 ## How It Works
 
 SayCut guides you through five phases, all driven by voice interaction:
@@ -135,21 +141,48 @@ uv run python assistant.py --model higgs-audio-understanding-v3-Hackathon
 - **`db.py`** — Async SQLite (sessions, storybooks, scenes, messages) via `aiosqlite`; supports mode, characters, and dialogue_lines fields
 - **`asset_storage.py`** — Save/serve/delete generated assets (images, video, audio) on local filesystem
 - **`config.py`** — Env vars, paths, port config
+- **`models.py`** — Pydantic models for DB records
 
 ### Shared utilities (`bosonUtil/`)
 - **`audio.py`** — Audio chunking pipeline: load, resample to 16kHz, Silero VAD segmentation, 4-second chunking, base64 WAV encoding
 - **`audio_concat.py`** — WAV concatenation for multi-voice dialogue: normalizes to 24kHz/16-bit/mono, inserts silence gaps between segments
 - **`api.py`** — API configuration, message building, and prediction calls against the OpenAI-compatible endpoint
 - **`tools.py`** — Tool definitions, `<tool_call>` tag parsing, and safe math evaluation
+- **`eigen_config.py`** — Shared EigenAI API configuration and auth
+- **`eigen_script.py`** — Script generation client (kimi-k2-5, OpenAI-compatible)
+- **`eigen_tts.py`** — Text-to-speech client with Morgan Freeman voice support
+- **`eigen_image_gen.py`** — Image generation client
+- **`eigen_image_edit.py`** — Image editing client (multipart upload)
+- **`eigen_i2v.py`** — Image-to-video client (async polling)
 
 ### Frontend (`frontend/app/`)
+- **`lib/types.ts`** — TypeScript types (Scene, Message, Storybook, StoryMode, DialogueLine, CharacterConfig)
 - **`lib/wsClient.ts`** — `WSClient` class: WebSocket connection with auto-reconnect and `onReady` callback
+- **`lib/api.ts`** — REST client: `fetchStorybooks()`, `fetchStorybook(id)`, `fetchMessages(id)`
+- **`lib/editorContext.ts`** — React context to pass `storybookId` down to `useAgent`
+- **`lib/stripToolCalls.ts`** — Utility to strip `<tool_call>` tags from agent text for display
+- **`stores/conversationStore.ts`** — Zustand store for conversation messages with streaming and tool status tracking
+- **`stores/storybookStore.ts`** — Zustand store for storybook scenes, mode, characters
+- **`stores/uiStore.ts`** — Zustand store for UI state
 - **`hooks/useAgent.ts`** — React hook: manages WebSocket lifecycle, dispatches server events to stores; sends `SET_PROJECT_MODE` and `LOAD_STORYBOOK` as needed
 - **`hooks/useAudioRecorder.ts`** — React hook: browser mic capture → 16kHz PCM WAV → base64
+- **`hooks/useAudioPlayback.ts`** — React hook for audio playback control
+- **`hooks/useWaveformAnalyser.ts`** — React hook for Web Audio API waveform analysis
+- **`components/Workspace.tsx`** — Main workspace layout composing AgentPanel + SceneEditor
+- **`components/AgentPanel.tsx`** — Chat panel with conversation messages and tool call cards
+- **`components/MessageBubble.tsx`** — Individual message bubble (user/agent)
+- **`components/ToolCallCard.tsx`** — Tool execution status card with scene image thumbnails
 - **`components/ModeSelector.tsx`** — Mode selection screen: Story vs Movie cards, character name/voice config for movie mode
 - **`components/SceneEditor.tsx`** — Scene thumbnail grid; renders dialogue lines (movie) or narration textarea (story)
+- **`components/SceneCard.tsx`** — Individual scene card in the editor grid
+- **`components/SceneStrip.tsx`** — Horizontal scene thumbnail strip/timeline
 - **`components/PlayerOverlay.tsx`** — Cinematic player with crossfade; stacked dialogue subtitles (movie) or narration text (story)
 - **`components/VoiceOrb.tsx`** — Toggle-click voice input (tap to start/stop recording)
+- **`components/VoiceWaveform.tsx`** — Real-time waveform visualization
+- **`components/SayCutLogo.tsx`** — Reusable logo (size: sm/md/lg/xl, variant: full/mark/wordmark)
+- **`components/StatusPill.tsx`** — Agent status indicator pill
+- **`components/ActivityLog.tsx`** — Activity log display
+- **`components/ProjectCard.tsx`** — Card for projects listing: thumbnail, title, scene count, date
 
 ### CLI demo
 - **`assistant.py`** — Standalone CLI demo of the voice agent (not the production entry point)
