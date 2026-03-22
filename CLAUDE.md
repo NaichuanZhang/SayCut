@@ -85,7 +85,7 @@ uv run pytest tests/test_integration.py::TestSafeEvalMath::test_basic_addition -
 - `frontend/app/hooks/useAudioRecorder.ts` — React hook: browser mic → 16kHz PCM WAV → base64
 - `frontend/app/components/ProjectCard.tsx` — Card component for projects listing: thumbnail, title, scene count, relative date
 - `frontend/app/components/SceneEditor.tsx` — Scene thumbnail grid; prefers `<video>` over `<img>` when `videoUrl` exists
-- `frontend/app/components/PlayerOverlay.tsx` — Full-screen cinematic player with crossfade; prefers `<video>` over `<img>` when `videoUrl` exists
+- `frontend/app/components/PlayerOverlay.tsx` — Full-screen cinematic player with crossfade; plays narration audio alongside looping video, advances scenes on audio `ended` event (falls back to 6s timer when no `audioUrl`); prefers `<video>` over `<img>` when `videoUrl` exists
 - `assistant.py` — Standalone CLI demo of the voice agent (not the production entry point)
 
 ## HiggsAudioM3 API Specs

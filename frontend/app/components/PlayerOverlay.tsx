@@ -1,13 +1,13 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import clsx from "clsx";
 import { useUIStore } from "../stores/uiStore";
 import { useStorybookStore } from "../stores/storybookStore";
 import { SayCutLogo } from "./SayCutLogo";
 
-const SCENE_DURATION = 6000; // ms per scene
+const FALLBACK_DURATION = 6000; // ms per scene when no audio
 const FADE_DURATION = 1000;
 
 export function PlayerOverlay() {
@@ -18,6 +18,8 @@ export function PlayerOverlay() {
 
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
+  const audioRef = useRef<HTMLAudioElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
 
   useEffect(() => {
     if (!isPlayerOpen) {
@@ -26,22 +28,43 @@ export function PlayerOverlay() {
     }
   }, [isPlayerOpen]);
 
+  const currentScene = readyScenes[currentIndex];
+
+  // Advance to next scene (or close if last)
+  const advanceScene = useCallback(() => {
+    setCurrentIndex((i) => {
+      if (i < readyScenes.length - 1) return i + 1;
+      closePlayer();
+      return i;
+    });
+  }, [readyScenes.length, closePlayer]);
+
+  // Audio ended → advance scene
+  const handleAudioEnded = useCallback(() => {
+    advanceScene();
+  }, [advanceScene]);
+
+  // Fallback timer for scenes without audioUrl
   useEffect(() => {
-    if (!isPlayerOpen || isPaused || readyScenes.length === 0) return;
-
-    const timer = setTimeout(() => {
-      if (currentIndex < readyScenes.length - 1) {
-        setCurrentIndex((i) => i + 1);
-      } else {
-        closePlayer();
-      }
-    }, SCENE_DURATION);
-
+    if (!isPlayerOpen || isPaused || !currentScene || currentScene.audioUrl)
+      return;
+    const timer = setTimeout(advanceScene, FALLBACK_DURATION);
     return () => clearTimeout(timer);
-  }, [isPlayerOpen, isPaused, currentIndex, readyScenes.length, closePlayer]);
+  }, [isPlayerOpen, isPaused, currentIndex, currentScene, advanceScene]);
+
+  // Sync pause/play to both audio and video
+  useEffect(() => {
+    if (!isPlayerOpen) return;
+    if (isPaused) {
+      audioRef.current?.pause();
+      videoRef.current?.pause();
+    } else {
+      audioRef.current?.play().catch(() => {});
+      videoRef.current?.play().catch(() => {});
+    }
+  }, [isPaused, isPlayerOpen]);
 
   const togglePause = useCallback(() => setIsPaused((p) => !p), []);
-  const currentScene = readyScenes[currentIndex];
 
   return (
     <AnimatePresence>
@@ -94,9 +117,12 @@ export function PlayerOverlay() {
               >
                 {currentScene.videoUrl ? (
                   <video
+                    key={currentScene.id}
+                    ref={videoRef}
                     src={currentScene.videoUrl}
                     className="w-full h-full object-contain"
                     autoPlay
+                    loop
                     muted
                     playsInline
                   />
@@ -110,6 +136,17 @@ export function PlayerOverlay() {
                 ) : null}
               </motion.div>
             </AnimatePresence>
+
+            {/* Audio narration */}
+            {currentScene.audioUrl && (
+              <audio
+                key={currentScene.id}
+                ref={audioRef}
+                src={currentScene.audioUrl}
+                autoPlay
+                onEnded={handleAudioEnded}
+              />
+            )}
 
             {/* Letterbox bars */}
             <div className="absolute top-0 left-0 right-0 h-16 bg-gradient-to-b from-black to-transparent" />
