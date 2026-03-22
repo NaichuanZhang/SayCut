@@ -113,13 +113,11 @@ async def websocket_endpoint(websocket: WebSocket):
                     existing = await get_session(db, requested_id)
                     if existing:
                         session_id = requested_id
-                        # Restore conversation history if agent doesn't have it
-                        agent = get_agent()
-                        if session_id not in agent._histories:
-                            messages = await get_messages_by_session(db, session_id)
-                            if messages:
-                                agent.restore_history(session_id, messages)
-                                logger.info("Restored %d messages for session %s", len(messages), session_id)
+                        # Don't restore full message history into voice agent —
+                        # it includes internal messages (nudges, tool responses)
+                        # that pollute the model context. Instead, rely on
+                        # LOAD_STORYBOOK → inject_context() for resumed sessions.
+                        logger.info("Resuming existing session %s", session_id)
                     else:
                         session_id = await create_session(db)
                 else:

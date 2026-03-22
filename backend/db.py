@@ -141,6 +141,24 @@ async def shift_scene_indices(
     await db.commit()
 
 
+async def delete_scene(
+    db: aiosqlite.Connection, scene_id: str
+) -> dict | None:
+    """Delete a scene and shift later indices backward. Returns deleted scene or None."""
+    cursor = await db.execute("SELECT * FROM scenes WHERE id = ?", (scene_id,))
+    row = await cursor.fetchone()
+    if not row:
+        return None
+    scene = dict(row)
+    await db.execute("DELETE FROM scenes WHERE id = ?", (scene_id,))
+    await db.execute(
+        "UPDATE scenes SET idx = idx - 1 WHERE storybook_id = ? AND idx > ?",
+        (scene["storybook_id"], scene["idx"]),
+    )
+    await db.commit()
+    return scene
+
+
 async def update_scene_field(
     db: aiosqlite.Connection, scene_id: str, field: str, value: str
 ) -> None:

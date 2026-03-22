@@ -16,8 +16,8 @@ from bosonUtil.eigen_image_edit import edit_image
 from bosonUtil.eigen_i2v import generate_video
 from bosonUtil.eigen_tts import synthesize_speech
 
-from backend.asset_storage import save_asset, get_asset_url
-from backend.db import create_scene, get_scenes_by_storybook, shift_scene_indices, update_scene_field
+from backend.asset_storage import delete_asset, save_asset, get_asset_url
+from backend.db import create_scene, delete_scene, get_scenes_by_storybook, shift_scene_indices, update_scene_field
 
 SendEvent = Callable[..., Awaitable[None]]
 
@@ -123,6 +123,23 @@ STORYBOOK_TOOLS = [
                     },
                 },
                 "required": ["scene_id", "edit_prompt"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "remove_scene",
+            "description": "Remove a scene and its assets from the storybook.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "scene_id": {
+                        "type": "string",
+                        "description": "The scene ID to remove",
+                    },
+                },
+                "required": ["scene_id"],
             },
         },
     },
@@ -337,6 +354,39 @@ async def _execute_edit_image(
     return {"name": "edit_scene_image", "scene_id": scene_id, "status": "done"}
 
 
+async def _execute_remove_scene(
+    args: dict,
+    send_event: SendEvent,
+    db: aiosqlite.Connection,
+    assets_dir: str,
+) -> dict:
+    scene_id = args["scene_id"]
+
+    scene = await _validate_scene(db, scene_id)
+    if not scene:
+        return {"name": "remove_scene", "error": f"Scene {scene_id} not found"}
+
+    # Delete asset files
+    for field in ("image_path", "video_path", "audio_path"):
+        delete_asset(assets_dir, scene.get(field))
+
+    # Delete DB row and shift indices
+    deleted = await delete_scene(db, scene_id)
+    if not deleted:
+        return {"name": "remove_scene", "error": f"Failed to delete scene {scene_id}"}
+
+    await send_event("scene_remove", scene_id=scene_id)
+
+    # Notify frontend of shifted indices
+    storybook_id = deleted["storybook_id"]
+    remaining = await get_scenes_by_storybook(db, storybook_id)
+    for s in remaining:
+        if s["idx"] >= deleted["idx"]:
+            await send_event("scene_update", scene_id=s["id"], field="index", value=s["idx"])
+
+    return {"name": "remove_scene", "status": "removed", "scene_id": scene_id}
+
+
 async def execute_storybook_tool(
     tool_name: str,
     args: dict,
@@ -372,6 +422,10 @@ async def execute_storybook_tool(
         elif tool_name == "edit_scene_image":
             result = await _execute_edit_image(
                 args, send_event, db, session_id, assets_dir
+            )
+        elif tool_name == "remove_scene":
+            result = await _execute_remove_scene(
+                args, send_event, db, assets_dir
             )
         else:
             result = {"name": tool_name, "error": f"Unknown tool: {tool_name}"}

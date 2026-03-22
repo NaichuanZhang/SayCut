@@ -37,6 +37,7 @@ export function useAgent(storybookId?: string) {
   const updateSceneTTS = useStorybookStore((s) => s.updateSceneTTS);
   const updateSceneStatus = useStorybookStore((s) => s.updateSceneStatus);
   const updateSceneIndex = useStorybookStore((s) => s.updateSceneIndex);
+  const removeScene = useStorybookStore((s) => s.removeScene);
   const clear = useStorybookStore((s) => s.clear);
 
   const setAgentState = useUIStore((s) => s.setAgentState);
@@ -152,6 +153,14 @@ export function useAgent(storybookId?: string) {
           break;
         }
 
+        case "scene_remove": {
+          const removedId = msg.scene_id as string;
+          removeScene(removedId);
+          const selected = useUIStore.getState().selectedSceneId;
+          if (selected === removedId) selectScene(null);
+          break;
+        }
+
         case "scene_update": {
           const sceneId = msg.scene_id as string;
           const field = msg.field as string;
@@ -193,6 +202,7 @@ export function useAgent(storybookId?: string) {
       updateSceneTTS,
       updateSceneStatus,
       updateSceneIndex,
+      removeScene,
       selectScene,
       storybookId,
     ],

@@ -14,7 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from backend.config import ASSETS_DIR, DB_PATH
-from backend.db import init_db, list_storybooks, get_storybook_with_scenes
+from backend.db import init_db, get_messages_by_session, list_storybooks, get_storybook_with_scenes
 from backend.ws_handler import websocket_endpoint
 
 app = FastAPI(title="SayCut Backend")
@@ -92,6 +92,28 @@ async def get_storybook_detail(storybook_id: str):
                 for s in data["scenes"]
             ],
         }
+    finally:
+        await db.close()
+
+
+@app.get("/api/storybooks/{storybook_id}/messages")
+async def get_storybook_messages(storybook_id: str):
+    """Get conversation messages for a storybook's session."""
+    db = await init_db(DB_PATH)
+    try:
+        data = await get_storybook_with_scenes(db, storybook_id)
+        if data is None:
+            return JSONResponse(status_code=404, content={"error": "Storybook not found"})
+        messages = await get_messages_by_session(db, data["session_id"])
+        return [
+            {
+                "id": m["id"],
+                "role": m["role"],
+                "text": m["text"],
+                "createdAt": m["created_at"],
+            }
+            for m in messages
+        ]
     finally:
         await db.close()
 

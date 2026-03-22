@@ -14,6 +14,7 @@ class ServerMessageType(str, Enum):
     STORYBOOK_CREATED = "storybook_created"
     SCENE_ADD = "scene_add"
     SCENE_UPDATE = "scene_update"
+    SCENE_REMOVE = "scene_remove"
     AGENT_IDLE = "agent_idle"
     ERROR = "error"
 

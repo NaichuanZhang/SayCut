@@ -43,7 +43,7 @@ uv run pytest tests/test_integration.py::TestSafeEvalMath::test_basic_addition -
 
 **Stack**: Next.js frontend → FastAPI backend → BosonAI + EigenAI APIs. Generated assets stored on local filesystem.
 
-**Routes**: `/` — projects listing page; `/project/new` — new storybook editor; `/project/[id]` — resume editing existing storybook (hydrates scenes from REST, connects fresh WS session with `LOAD_STORYBOOK` to inject context into voice agent).
+**Routes**: `/` — projects listing page; `/project/new` — new storybook editor; `/project/[id]` — resume editing existing storybook (hydrates scenes + conversation history from REST, connects fresh WS session with `LOAD_STORYBOOK` to inject context into voice agent — full message history is NOT restored into the voice model to avoid polluting context).
 
 **Production data flow**: Browser mic → `useAudioRecorder` (16kHz PCM → WAV → base64) → `useAgent` → `WSClient` (WebSocket) → `ws_handler.py` → `VoiceAgent` → `audio.py` (VAD → 4s chunks) → BosonAI API → streamed response → WebSocket events → frontend stores
 
@@ -56,6 +56,7 @@ uv run pytest tests/test_integration.py::TestSafeEvalMath::test_basic_addition -
 4. Model chains `generate_scene_video` for all scenes → video saved, `scene_update` events with `videoUrl`
 5. User can request edits ("make the kitten bigger in scene 2") → `edit_scene_image`
 6. User can insert scenes between existing ones ("add a scene between 1 and 2") → `generate_script` with `insert_after_scene_id` → backend shifts existing scene indices, inserts new scenes, sends `scene_update` events with `field="index"` for shifted scenes
+7. User can remove scenes ("remove scene 3") → `remove_scene` → deletes scene row + asset files, shifts remaining indices backward, sends `scene_remove` event + `scene_update` events for re-indexed scenes
 
 **AI Models**:
 - Voice Agent (STT + tool calling): `higgs-audio-understanding-v3.5-Hackathon` via BosonAI (`hackathon.boson.ai/v1`)
@@ -66,19 +67,19 @@ uv run pytest tests/test_integration.py::TestSafeEvalMath::test_basic_addition -
 - Text-to-Speech: `higgs2p5` via EigenAI (`data.eigenai.com`, WebSocket streaming)
 
 **Key modules**:
-- `backend/main.py` — FastAPI app, mounts `/assets` static files, exposes `/ws` WebSocket, `/health`, and REST endpoints `GET /api/storybooks` (list) and `GET /api/storybooks/{id}` (detail with scenes)
+- `backend/main.py` — FastAPI app, mounts `/assets` static files, exposes `/ws` WebSocket, `/health`, and REST endpoints `GET /api/storybooks` (list), `GET /api/storybooks/{id}` (detail with scenes), `GET /api/storybooks/{id}/messages` (conversation history)
 - `backend/ws_handler.py` — WebSocket endpoint: session init, `load_storybook` (resume existing), `tool_executor` closure with lazy storybook creation, routes `audio_data`/`text_message` to `VoiceAgent`
-- `backend/ws_protocol.py` — Message type enums (`ClientMessageType` incl. `LOAD_STORYBOOK`, `ServerMessageType` incl. `STORYBOOK_CREATED`), encode/decode helpers
+- `backend/ws_protocol.py` — Message type enums (`ClientMessageType` incl. `LOAD_STORYBOOK`, `ServerMessageType` incl. `STORYBOOK_CREATED`, `SCENE_REMOVE`), encode/decode helpers
 - `backend/voice_agent.py` — Async `VoiceAgent` class: streaming responses, multi-turn history with sliding-window truncation (`MAX_HISTORY_MESSAGES=20`), tool call loop with auto-nudge, custom tools injection via `tools` param, `inject_context()` for resumed storybooks
-- `backend/storybook_tools.py` — Async tool executors (script, image, audio, video, edit) with DB persistence; `generate_script` supports `insert_after_scene_id` for inserting scenes between existing ones; returns text-only results to model (no asset URLs)
-- `backend/db.py` — Async SQLite layer (sessions, storybooks, scenes, messages) via `aiosqlite`; includes `shift_scene_indices()` for scene insertion, `list_storybooks()` and `get_storybook_with_scenes()` for REST endpoints
-- `backend/asset_storage.py` — Save/serve generated assets on local filesystem
+- `backend/storybook_tools.py` — Async tool executors (script, image, audio, video, edit, remove) with DB persistence; `generate_script` supports `insert_after_scene_id` for inserting scenes; `remove_scene` deletes scene + assets and shifts indices; returns text-only results to model (no asset URLs)
+- `backend/db.py` — Async SQLite layer (sessions, storybooks, scenes, messages) via `aiosqlite`; includes `shift_scene_indices()` for scene insertion, `delete_scene()` for removal with index compaction, `list_storybooks()` and `get_storybook_with_scenes()` for REST endpoints
+- `backend/asset_storage.py` — Save/serve/delete generated assets on local filesystem
 - `backend/config.py` — Env vars, paths (`ASSETS_DIR`, `DB_PATH`), `BACKEND_PORT`
 - `bosonUtil/audio.py` — Audio chunking pipeline; VAD model is cached as a module-level singleton
 - `bosonUtil/api.py` — API config constants, `build_messages()`, and `predict()` for one-shot calls
-- `bosonUtil/tools.py` — Tool definitions, `<tool_call>` tag parsing (handles array/object/nested formats), `build_system_prompt()` with custom tools param, safe math eval
+- `bosonUtil/tools.py` — Tool definitions, `<tool_call>` tag parsing (handles array/object/nested formats + truncated calls), `build_system_prompt()` with custom tools param, safe math eval
 - `frontend/app/lib/wsClient.ts` — `WSClient` class: WebSocket connection with auto-reconnect, `sendLoadStorybook()` for resume flow
-- `frontend/app/lib/api.ts` — REST client: `fetchStorybooks()` and `fetchStorybook(id)` for the projects page and editor hydration
+- `frontend/app/lib/api.ts` — REST client: `fetchStorybooks()`, `fetchStorybook(id)`, and `fetchMessages(id)` for projects page, editor hydration, and conversation history
 - `frontend/app/lib/editorContext.ts` — React context to pass `storybookId` down to `useAgent` via `VoiceOrb`
 - `frontend/app/hooks/useAgent.ts` — React hook: connects WSClient, dispatches server messages to stores; accepts optional `storybookId` to send `LOAD_STORYBOOK` on resume
 - `frontend/app/hooks/useAudioRecorder.ts` — React hook: browser mic → 16kHz PCM WAV → base64

@@ -11,6 +11,7 @@ export type ServerMessageType =
   | "tool_status"
   | "scene_add"
   | "scene_update"
+  | "scene_remove"
   | "error";
 
 export interface ServerMessage {

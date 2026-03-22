@@ -400,6 +400,77 @@ class TestInsertSceneBetweenExisting:
         assert "error" in result
 
 
+class TestRemoveScene:
+    @pytest.mark.asyncio
+    async def test_removes_scene_and_shifts_indices(self, db, assets_dir):
+        """remove_scene deletes the scene and shifts later indices backward."""
+        session_id = await create_session(db)
+        storybook_id = await create_storybook(db, session_id, "Test Story")
+
+        scene_ids = []
+        for i in range(3):
+            sid = await create_scene(
+                db, storybook_id=storybook_id, idx=i, title=f"Scene {i + 1}",
+                narration_text=f"N{i + 1}", visual_description=f"V{i + 1}",
+            )
+            scene_ids.append(sid)
+
+        events = []
+
+        async def send_event(event_type, **kwargs):
+            events.append({"type": event_type, **kwargs})
+
+        result = await execute_storybook_tool(
+            "remove_scene",
+            {"scene_id": scene_ids[1]},
+            send_event=send_event,
+            db=db,
+            session_id=session_id,
+            storybook_id=storybook_id,
+            assets_dir=assets_dir,
+        )
+
+        assert result["status"] == "removed"
+        assert result["scene_id"] == scene_ids[1]
+
+        remaining = await get_scenes_by_storybook(db, storybook_id)
+        assert len(remaining) == 2
+        assert remaining[0]["id"] == scene_ids[0]
+        assert remaining[0]["idx"] == 0
+        assert remaining[1]["id"] == scene_ids[2]
+        assert remaining[1]["idx"] == 1
+
+        remove_events = [e for e in events if e["type"] == "scene_remove"]
+        assert len(remove_events) == 1
+        assert remove_events[0]["scene_id"] == scene_ids[1]
+
+        index_events = [e for e in events if e["type"] == "scene_update" and e.get("field") == "index"]
+        assert any(e["scene_id"] == scene_ids[2] for e in index_events)
+
+    @pytest.mark.asyncio
+    async def test_remove_nonexistent_scene_returns_error(self, db, assets_dir):
+        """remove_scene with non-existent scene_id returns error."""
+        session_id = await create_session(db)
+        storybook_id = await create_storybook(db, session_id, "Test")
+
+        events = []
+
+        async def send_event(event_type, **kwargs):
+            events.append({"type": event_type, **kwargs})
+
+        result = await execute_storybook_tool(
+            "remove_scene",
+            {"scene_id": "nonexistent"},
+            send_event=send_event,
+            db=db,
+            session_id=session_id,
+            storybook_id=storybook_id,
+            assets_dir=assets_dir,
+        )
+
+        assert "error" in result
+
+
 class TestToolSendsStatusEvents:
     @pytest.mark.asyncio
     async def test_status_events_emitted(self, db, assets_dir):

@@ -11,6 +11,7 @@ interface StorybookStore {
   updateSceneTTS: (sceneId: string, audioUrl: string) => void;
   updateSceneStatus: (sceneId: string, status: Scene["status"]) => void;
   updateSceneIndex: (sceneId: string, index: number) => void;
+  removeScene: (sceneId: string) => void;
   updateSceneNarration: (sceneId: string, narrationText: string) => void;
   loadScenes: (scenes: readonly Scene[]) => void;
   clear: () => void;
@@ -67,6 +68,13 @@ export const useStorybookStore = create<StorybookStore>((set) => ({
       scenes: state.scenes
         .map((s) => (s.id === sceneId ? { ...s, index } : s))
         .sort((a, b) => a.index - b.index),
+    })),
+
+  removeScene: (sceneId) =>
+    set((state) => ({
+      scenes: state.scenes
+        .filter((s) => s.id !== sceneId)
+        .map((s, i) => ({ ...s, index: i })),
     })),
 
   updateSceneNarration: (sceneId, narrationText) =>

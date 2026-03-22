@@ -6,11 +6,12 @@ import { useConversationStore } from "../../stores/conversationStore";
 import { useStorybookStore } from "../../stores/storybookStore";
 import { useUIStore } from "../../stores/uiStore";
 import { MOCK_AGENT_RESPONSES } from "../../lib/mockData";
-import { fetchStorybook } from "../../lib/api";
+import { fetchStorybook, fetchMessages } from "../../lib/api";
 import { AgentPanel } from "../../components/AgentPanel";
 import { Workspace } from "../../components/Workspace";
 import { PlayerOverlay } from "../../components/PlayerOverlay";
-import { Scene } from "../../lib/types";
+import { Message, Scene } from "../../lib/types";
+import { stripToolCalls } from "../../lib/stripToolCalls";
 import { EditorContext } from "../../lib/editorContext";
 
 const BACKEND_URL =
@@ -30,6 +31,7 @@ export default function EditorPage() {
   const hydrated = useRef(false);
 
   const messages = useConversationStore((s) => s.messages);
+  const loadMessages = useConversationStore((s) => s.loadMessages);
   const startAgentMessage = useConversationStore((s) => s.startAgentMessage);
   const appendAgentChunk = useConversationStore((s) => s.appendAgentChunk);
   const finalizeAgentMessage = useConversationStore(
@@ -54,8 +56,8 @@ export default function EditorPage() {
     if (isNew || hydrated.current) return;
     hydrated.current = true;
 
-    fetchStorybook(id)
-      .then((data) => {
+    Promise.all([fetchStorybook(id), fetchMessages(id)])
+      .then(([data, rawMsgs]) => {
         setStorybookId(data.id);
         const scenes: Scene[] = data.scenes.map((s) => ({
           ...s,
@@ -67,13 +69,35 @@ export default function EditorPage() {
         if (scenes.length > 0) {
           selectScene(scenes[0].id);
         }
+
+        // Restore conversation history, filtering out internal messages
+        const restored: Message[] = rawMsgs
+          .filter((m) => {
+            if (m.text.startsWith("<tool_response>")) return false;
+            if (m.text === "[audio input]") return false;
+            if (m.text.startsWith("Continue —")) return false;
+            return true;
+          })
+          .map((m) => ({
+            id: m.id,
+            role:
+              m.role === "assistant" ? ("agent" as const) : ("user" as const),
+            text: m.role === "assistant" ? stripToolCalls(m.text) : m.text,
+            timestamp: new Date(m.createdAt).getTime(),
+          }))
+          .filter((m) => m.text.length > 0);
+
+        if (restored.length > 0) {
+          loadMessages(restored);
+        }
+
         setReady(true);
       })
       .catch((err) => {
         console.error("Failed to load storybook:", err);
         setReady(true);
       });
-  }, [id, isNew, setStorybookId, loadScenes, selectScene]);
+  }, [id, isNew, setStorybookId, loadScenes, loadMessages, selectScene]);
 
   // Show welcome message on mount (only for new projects)
   useEffect(() => {

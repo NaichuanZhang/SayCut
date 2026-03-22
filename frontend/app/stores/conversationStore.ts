@@ -9,6 +9,7 @@ interface ConversationStore {
   appendAgentChunk: (id: string, text: string) => void;
   finalizeAgentMessage: (id: string) => void;
   addToolStatus: (name: string, status: string) => void;
+  loadMessages: (msgs: readonly Message[]) => void;
   clear: () => void;
 }
 
@@ -92,6 +93,8 @@ export const useConversationStore = create<ConversationStore>((set) => ({
         ],
       };
     }),
+
+  loadMessages: (msgs) => set({ messages: msgs }),
 
   clear: () => set({ messages: [], isStreaming: false }),
 }));

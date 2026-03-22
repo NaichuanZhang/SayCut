@@ -29,3 +29,20 @@ export async function fetchStorybook(id: string): Promise<StorybookDetail> {
   if (!res.ok) throw new Error("Failed to fetch storybook");
   return res.json();
 }
+
+export interface MessageRecord {
+  readonly id: string;
+  readonly role: string;
+  readonly text: string;
+  readonly createdAt: string;
+}
+
+export async function fetchMessages(
+  storybookId: string,
+): Promise<MessageRecord[]> {
+  const res = await fetch(
+    `${BASE}/api/storybooks/${encodeURIComponent(storybookId)}/messages`,
+  );
+  if (!res.ok) throw new Error("Failed to fetch messages");
+  return res.json();
+}

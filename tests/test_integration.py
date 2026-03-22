@@ -584,6 +584,29 @@ class TestStorybookInsertScene:
 
 @skip_without_api_key
 @integration
+class TestStorybookRemoveSceneToolCall:
+    def test_voice_triggers_remove_scene(self):
+        """User says 'remove the first scene' and model calls remove_scene."""
+        tmp_path = _say_to_wav("Remove the first scene from the storybook")
+        try:
+            messages = _build_seeded_history()
+            messages.append({"role": "user", "content": _audio_to_content_parts(tmp_path)})
+
+            client = _make_boson_client()
+            response_text, tool_calls = _chat_until_tool_call(
+                client, messages, "remove_scene"
+            )
+
+            assert len(tool_calls) >= 1, f"Expected remove_scene call, got: {response_text[:200]}"
+            remove_calls = [tc for tc in tool_calls if tc["name"] == "remove_scene"]
+            assert len(remove_calls) >= 1
+            assert "scene_id" in remove_calls[0]["arguments"]
+        finally:
+            os.unlink(tmp_path)
+
+
+@skip_without_api_key
+@integration
 class TestStorybookFullFlow:
     def test_multi_turn_script_then_images(self):
         """Multi-turn: script generation, then image generation."""
