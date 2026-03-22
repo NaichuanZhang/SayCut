@@ -151,20 +151,24 @@ async def _execute_generate_script(
     title = script.get("title", "Untitled Story")
     scenes_data = script.get("scenes", [])
 
+    existing_scenes = await get_scenes_by_storybook(db, storybook_id)
+    idx_offset = len(existing_scenes)
+
     result_scenes = []
     for i, s in enumerate(scenes_data):
+        idx = idx_offset + i
         scene_id = await create_scene(
             db,
             storybook_id=storybook_id,
-            idx=i,
-            title=s.get("title", f"Scene {i + 1}"),
+            idx=idx,
+            title=s.get("title", f"Scene {idx + 1}"),
             narration_text=s.get("narration_text", ""),
             visual_description=s.get("visual_description", ""),
         )
         scene_payload = {
             "id": scene_id,
-            "index": i,
-            "title": s.get("title", f"Scene {i + 1}"),
+            "index": idx,
+            "title": s.get("title", f"Scene {idx + 1}"),
             "narrationText": s.get("narration_text", ""),
             "visualDescription": s.get("visual_description", ""),
             "imageUrl": None,
