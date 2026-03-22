@@ -12,7 +12,7 @@ from backend.storybook_tools import (
     STORYBOOK_TOOLS,
     execute_storybook_tool,
 )
-from backend.db import init_db, create_session, create_storybook, create_scene, get_scenes_by_storybook
+from backend.db import init_db, create_session, create_storybook, create_scene, get_scenes_by_storybook, shift_scene_indices
 
 
 @pytest_asyncio.fixture
@@ -293,6 +293,110 @@ class TestExecuteUnknownTool:
             storybook_id=storybook_id,
             assets_dir=assets_dir,
         )
+        assert "error" in result
+
+
+class TestInsertSceneBetweenExisting:
+    @pytest.mark.asyncio
+    async def test_inserts_scenes_and_shifts_indices(self, db, assets_dir):
+        """generate_script with insert_after_scene_id inserts at correct position and shifts."""
+        session_id = await create_session(db)
+        storybook_id = await create_storybook(db, session_id, "Test Story")
+
+        # Create 3 existing scenes at idx 0, 1, 2
+        scene_ids = []
+        for i in range(3):
+            sid = await create_scene(
+                db, storybook_id=storybook_id, idx=i, title=f"Scene {i + 1}",
+                narration_text=f"Narration {i + 1}", visual_description=f"Visual {i + 1}",
+            )
+            scene_ids.append(sid)
+
+        events = []
+
+        async def send_event(event_type, **kwargs):
+            events.append({"type": event_type, **kwargs})
+
+        mock_script_response = json.dumps({
+            "title": "Extended Story",
+            "scenes": [
+                {
+                    "title": "Inserted Scene A",
+                    "narration_text": "The kitten crosses a river.",
+                    "visual_description": "A kitten crossing a river.",
+                },
+                {
+                    "title": "Inserted Scene B",
+                    "narration_text": "The kitten finds a bridge.",
+                    "visual_description": "A kitten on a bridge.",
+                },
+            ],
+        })
+
+        with patch("backend.storybook_tools.generate_script", new_callable=AsyncMock) as mock_gen:
+            mock_gen.return_value = mock_script_response
+            result = await execute_storybook_tool(
+                "generate_script",
+                {"story_prompt": "river crossing", "insert_after_scene_id": scene_ids[0]},
+                send_event=send_event,
+                db=db,
+                session_id=session_id,
+                storybook_id=storybook_id,
+                assets_dir=assets_dir,
+            )
+
+        # New scenes should have idx 1 and 2
+        assert result["scenes"][0]["index"] == 1
+        assert result["scenes"][1]["index"] == 2
+
+        # Verify DB state: 5 scenes total, correct order
+        all_scenes = await get_scenes_by_storybook(db, storybook_id)
+        assert len(all_scenes) == 5
+        assert all_scenes[0]["id"] == scene_ids[0]  # original scene 0
+        assert all_scenes[0]["idx"] == 0
+        assert all_scenes[1]["title"] == "Inserted Scene A"
+        assert all_scenes[1]["idx"] == 1
+        assert all_scenes[2]["title"] == "Inserted Scene B"
+        assert all_scenes[2]["idx"] == 2
+        assert all_scenes[3]["id"] == scene_ids[1]  # original scene 1 shifted
+        assert all_scenes[3]["idx"] == 3
+        assert all_scenes[4]["id"] == scene_ids[2]  # original scene 2 shifted
+        assert all_scenes[4]["idx"] == 4
+
+        # Verify scene_update events sent for shifted scenes with field="index"
+        index_events = [e for e in events if e["type"] == "scene_update" and e.get("field") == "index"]
+        shifted_ids = {e["scene_id"] for e in index_events}
+        assert scene_ids[1] in shifted_ids
+        assert scene_ids[2] in shifted_ids
+
+    @pytest.mark.asyncio
+    async def test_insert_after_invalid_scene_returns_error(self, db, assets_dir):
+        """generate_script with non-existent insert_after_scene_id returns error."""
+        session_id = await create_session(db)
+        storybook_id = await create_storybook(db, session_id, "Test Story")
+
+        events = []
+
+        async def send_event(event_type, **kwargs):
+            events.append({"type": event_type, **kwargs})
+
+        mock_script_response = json.dumps({
+            "title": "Story",
+            "scenes": [{"title": "S1", "narration_text": "N1", "visual_description": "V1"}],
+        })
+
+        with patch("backend.storybook_tools.generate_script", new_callable=AsyncMock) as mock_gen:
+            mock_gen.return_value = mock_script_response
+            result = await execute_storybook_tool(
+                "generate_script",
+                {"story_prompt": "test", "insert_after_scene_id": "nonexistent"},
+                send_event=send_event,
+                db=db,
+                session_id=session_id,
+                storybook_id=storybook_id,
+                assets_dir=assets_dir,
+            )
+
         assert "error" in result
 
 

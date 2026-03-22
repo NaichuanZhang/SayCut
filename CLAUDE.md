@@ -55,6 +55,7 @@ uv run pytest tests/test_integration.py::TestSafeEvalMath::test_basic_addition -
 3. Model chains `generate_scene_audio` for all scenes → TTS audio saved, `scene_update` events with `audioUrl`
 4. Model chains `generate_scene_video` for all scenes → video saved, `scene_update` events with `videoUrl`
 5. User can request edits ("make the kitten bigger in scene 2") → `edit_scene_image`
+6. User can insert scenes between existing ones ("add a scene between 1 and 2") → `generate_script` with `insert_after_scene_id` → backend shifts existing scene indices, inserts new scenes, sends `scene_update` events with `field="index"` for shifted scenes
 
 **AI Models**:
 - Voice Agent (STT + tool calling): `higgs-audio-understanding-v3.5-Hackathon` via BosonAI (`hackathon.boson.ai/v1`)
@@ -69,8 +70,8 @@ uv run pytest tests/test_integration.py::TestSafeEvalMath::test_basic_addition -
 - `backend/ws_handler.py` — WebSocket endpoint: session init, `load_storybook` (resume existing), `tool_executor` closure with lazy storybook creation, routes `audio_data`/`text_message` to `VoiceAgent`
 - `backend/ws_protocol.py` — Message type enums (`ClientMessageType` incl. `LOAD_STORYBOOK`, `ServerMessageType` incl. `STORYBOOK_CREATED`), encode/decode helpers
 - `backend/voice_agent.py` — Async `VoiceAgent` class: streaming responses, multi-turn history with sliding-window truncation (`MAX_HISTORY_MESSAGES=20`), tool call loop with auto-nudge, custom tools injection via `tools` param, `inject_context()` for resumed storybooks
-- `backend/storybook_tools.py` — Async tool executors (script, image, audio, video, edit) with DB persistence; returns text-only results to model (no asset URLs)
-- `backend/db.py` — Async SQLite layer (sessions, storybooks, scenes, messages) via `aiosqlite`; includes `list_storybooks()` and `get_storybook_with_scenes()` for REST endpoints
+- `backend/storybook_tools.py` — Async tool executors (script, image, audio, video, edit) with DB persistence; `generate_script` supports `insert_after_scene_id` for inserting scenes between existing ones; returns text-only results to model (no asset URLs)
+- `backend/db.py` — Async SQLite layer (sessions, storybooks, scenes, messages) via `aiosqlite`; includes `shift_scene_indices()` for scene insertion, `list_storybooks()` and `get_storybook_with_scenes()` for REST endpoints
 - `backend/asset_storage.py` — Save/serve generated assets on local filesystem
 - `backend/config.py` — Env vars, paths (`ASSETS_DIR`, `DB_PATH`), `BACKEND_PORT`
 - `bosonUtil/audio.py` — Audio chunking pipeline; VAD model is cached as a module-level singleton

@@ -36,6 +36,7 @@ export function useAgent(storybookId?: string) {
   const updateSceneVideo = useStorybookStore((s) => s.updateSceneVideo);
   const updateSceneTTS = useStorybookStore((s) => s.updateSceneTTS);
   const updateSceneStatus = useStorybookStore((s) => s.updateSceneStatus);
+  const updateSceneIndex = useStorybookStore((s) => s.updateSceneIndex);
   const clear = useStorybookStore((s) => s.clear);
 
   const setAgentState = useUIStore((s) => s.setAgentState);
@@ -165,6 +166,8 @@ export function useAgent(storybookId?: string) {
             updateSceneTTS(sceneId, prefixAssetUrl(value) ?? value);
           } else if (field === "status") {
             updateSceneStatus(sceneId, value as Scene["status"]);
+          } else if (field === "index") {
+            updateSceneIndex(sceneId, Number(value));
           }
           break;
         }
@@ -189,6 +192,7 @@ export function useAgent(storybookId?: string) {
       updateSceneVideo,
       updateSceneTTS,
       updateSceneStatus,
+      updateSceneIndex,
       selectScene,
       storybookId,
     ],

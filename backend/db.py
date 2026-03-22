@@ -130,6 +130,17 @@ async def get_scenes_by_storybook(
     return [dict(row) for row in await cursor.fetchall()]
 
 
+async def shift_scene_indices(
+    db: aiosqlite.Connection, storybook_id: str, from_idx: int, offset: int
+) -> None:
+    """Shift scene indices >= from_idx forward by offset."""
+    await db.execute(
+        "UPDATE scenes SET idx = idx + ? WHERE storybook_id = ? AND idx >= ?",
+        (offset, storybook_id, from_idx),
+    )
+    await db.commit()
+
+
 async def update_scene_field(
     db: aiosqlite.Connection, scene_id: str, field: str, value: str
 ) -> None:

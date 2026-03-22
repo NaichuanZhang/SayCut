@@ -10,6 +10,7 @@ interface StorybookStore {
   updateSceneVideo: (sceneId: string, videoUrl: string) => void;
   updateSceneTTS: (sceneId: string, audioUrl: string) => void;
   updateSceneStatus: (sceneId: string, status: Scene["status"]) => void;
+  updateSceneIndex: (sceneId: string, index: number) => void;
   updateSceneNarration: (sceneId: string, narrationText: string) => void;
   loadScenes: (scenes: readonly Scene[]) => void;
   clear: () => void;
@@ -21,7 +22,17 @@ export const useStorybookStore = create<StorybookStore>((set) => ({
 
   setStorybookId: (id) => set({ storybookId: id }),
 
-  addScene: (scene) => set((state) => ({ scenes: [...state.scenes, scene] })),
+  addScene: (scene) =>
+    set((state) => {
+      const scenes = [...state.scenes];
+      const insertAt = scenes.findIndex((s) => s.index > scene.index);
+      if (insertAt === -1) {
+        scenes.push(scene);
+      } else {
+        scenes.splice(insertAt, 0, scene);
+      }
+      return { scenes };
+    }),
 
   updateSceneImage: (sceneId, imageUrl) =>
     set((state) => ({
@@ -49,6 +60,13 @@ export const useStorybookStore = create<StorybookStore>((set) => ({
       scenes: state.scenes.map((s) =>
         s.id === sceneId ? { ...s, status } : s,
       ),
+    })),
+
+  updateSceneIndex: (sceneId, index) =>
+    set((state) => ({
+      scenes: state.scenes
+        .map((s) => (s.id === sceneId ? { ...s, index } : s))
+        .sort((a, b) => a.index - b.index),
     })),
 
   updateSceneNarration: (sceneId, narrationText) =>

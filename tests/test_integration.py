@@ -556,6 +556,35 @@ class TestStorybookEditToolCall:
 
 @skip_without_api_key
 @integration
+class TestStorybookInsertScene:
+    def test_voice_triggers_insert_between_scenes(self):
+        """User says 'add a scene between 1 and 2' and model passes insert_after_scene_id."""
+        tmp_path = _say_to_wav(
+            "Add a new scene between scene one and scene two about the kitten crossing a river"
+        )
+        try:
+            messages = _build_seeded_history()
+            user_content = _audio_to_content_parts(tmp_path)
+            messages.append({"role": "user", "content": user_content})
+
+            client = _make_boson_client()
+            response_text, tool_calls = _chat_until_tool_call(
+                client, messages, "generate_script"
+            )
+
+            assert len(tool_calls) >= 1, f"Expected generate_script call, got: {response_text[:200]}"
+            tc = tool_calls[0]
+            assert tc["name"] == "generate_script"
+            assert "insert_after_scene_id" in tc["arguments"], (
+                f"Missing insert_after_scene_id in args: {tc['arguments']}"
+            )
+            assert tc["arguments"]["insert_after_scene_id"] == "scene_001"
+        finally:
+            os.unlink(tmp_path)
+
+
+@skip_without_api_key
+@integration
 class TestStorybookFullFlow:
     def test_multi_turn_script_then_images(self):
         """Multi-turn: script generation, then image generation."""

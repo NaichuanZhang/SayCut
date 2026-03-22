@@ -17,7 +17,7 @@ from bosonUtil.eigen_i2v import generate_video
 from bosonUtil.eigen_tts import synthesize_speech
 
 from backend.asset_storage import save_asset, get_asset_url
-from backend.db import create_scene, get_scenes_by_storybook, update_scene_field
+from backend.db import create_scene, get_scenes_by_storybook, shift_scene_indices, update_scene_field
 
 SendEvent = Callable[..., Awaitable[None]]
 
@@ -47,6 +47,10 @@ STORYBOOK_TOOLS = [
                     "num_scenes": {
                         "type": "integer",
                         "description": "Number of scenes to generate (default 4)",
+                    },
+                    "insert_after_scene_id": {
+                        "type": "string",
+                        "description": "Scene ID after which to insert new scenes. Omit to append at end.",
                     },
                 },
                 "required": ["story_prompt"],
@@ -158,8 +162,21 @@ async def _execute_generate_script(
     title = script.get("title", "Untitled Story")
     scenes_data = script.get("scenes", [])
 
-    existing_scenes = await get_scenes_by_storybook(db, storybook_id)
-    idx_offset = len(existing_scenes)
+    insert_after_id = args.get("insert_after_scene_id")
+    if insert_after_id:
+        target = await _validate_scene(db, insert_after_id)
+        if not target:
+            return {"name": "generate_script", "error": f"Scene {insert_after_id} not found"}
+        insert_idx = target["idx"] + 1
+        await shift_scene_indices(db, storybook_id, insert_idx, len(scenes_data))
+        shifted = await get_scenes_by_storybook(db, storybook_id)
+        for s in shifted:
+            if s["idx"] >= insert_idx + len(scenes_data):
+                await send_event("scene_update", scene_id=s["id"], field="index", value=s["idx"])
+        idx_offset = insert_idx
+    else:
+        existing_scenes = await get_scenes_by_storybook(db, storybook_id)
+        idx_offset = len(existing_scenes)
 
     result_scenes = []
     for i, s in enumerate(scenes_data):
