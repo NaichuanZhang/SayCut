@@ -11,7 +11,14 @@ export function SceneEditor() {
   const scenes = useStorybookStore((s) => s.scenes);
   const selectedSceneId = useUIStore((s) => s.selectedSceneId);
   const updateSceneNarration = useStorybookStore((s) => s.updateSceneNarration);
-  const { play, pause, isPlaying } = useAudioPlayback();
+  const { play, pause, isPlaying, currentTime, duration } = useAudioPlayback();
+
+  const progressPercent = duration > 0 ? (currentTime / duration) * 100 : 0;
+  const formatTime = (s: number) => {
+    const m = Math.floor(s / 60);
+    const sec = Math.floor(s % 60);
+    return `${m}:${sec.toString().padStart(2, "0")}`;
+  };
 
   const scene = scenes.find((s) => s.id === selectedSceneId);
   const [localText, setLocalText] = useState("");
@@ -181,12 +188,17 @@ export function SceneEditor() {
             {/* Progress bar placeholder */}
             <div className="flex-1 h-1 rounded-full bg-bg-elevated">
               {scene.audioUrl && (
-                <div className="h-full w-0 rounded-full bg-accent-cyan transition-all" />
+                <div
+                  className="h-full rounded-full bg-accent-cyan transition-all"
+                  style={{ width: `${progressPercent}%` }}
+                />
               )}
             </div>
 
             <span className="font-display text-[10px] text-text-muted">
-              {scene.audioUrl ? "0:00" : "No audio"}
+              {scene.audioUrl
+                ? `${formatTime(currentTime)} / ${formatTime(duration)}`
+                : "No audio"}
             </span>
           </div>
         </div>
