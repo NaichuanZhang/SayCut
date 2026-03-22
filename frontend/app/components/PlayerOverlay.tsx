@@ -153,19 +153,45 @@ export function PlayerOverlay() {
             <div className="absolute bottom-0 left-0 right-0 h-32 bg-gradient-to-t from-black to-transparent" />
           </div>
 
-          {/* Narration text (subtitle style) */}
+          {/* Subtitles: dialogue lines (movie) or narration text (story) */}
           <div className="absolute bottom-20 left-0 right-0 px-8">
             <AnimatePresence mode="wait">
-              <motion.p
+              <motion.div
                 key={currentScene.id}
-                className="text-center text-base text-white/90 max-w-2xl mx-auto leading-relaxed"
+                className="max-w-2xl mx-auto"
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -10 }}
                 transition={{ duration: 0.4 }}
               >
-                {currentScene.narrationText}
-              </motion.p>
+                {currentScene.dialogueLines &&
+                currentScene.dialogueLines.length > 0 ? (
+                  <div className="space-y-1">
+                    {currentScene.dialogueLines.map((line, i) => (
+                      <p
+                        key={i}
+                        className="text-center text-base leading-relaxed"
+                      >
+                        <span
+                          className={clsx(
+                            "font-display text-sm font-medium mr-1.5",
+                            line.character === "Narrator"
+                              ? "text-white/50"
+                              : "text-accent-cyan",
+                          )}
+                        >
+                          {line.character}:
+                        </span>
+                        <span className="text-white/90">{line.text}</span>
+                      </p>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-center text-base text-white/90 leading-relaxed">
+                    {currentScene.narrationText}
+                  </p>
+                )}
+              </motion.div>
             </AnimatePresence>
           </div>
 

@@ -1,5 +1,6 @@
 """FastAPI application — entry point for the SayCut backend."""
 
+import json
 import logging
 import os
 
@@ -54,6 +55,8 @@ async def get_storybooks():
             {
                 "id": row["id"],
                 "title": row["title"] or "Untitled Story",
+                "mode": row["mode"],
+                "characters": json.loads(row["characters"]) if row["characters"] else None,
                 "createdAt": row["created_at"],
                 "thumbnailUrl": _asset_url(row["thumbnail_path"]),
                 "sceneCount": row["scene_count"],
@@ -75,6 +78,8 @@ async def get_storybook_detail(storybook_id: str):
         return {
             "id": data["id"],
             "title": data["title"] or "Untitled Story",
+            "mode": data["mode"],
+            "characters": json.loads(data["characters"]) if data.get("characters") else None,
             "sessionId": data["session_id"],
             "createdAt": data["created_at"],
             "scenes": [
@@ -87,6 +92,7 @@ async def get_storybook_detail(storybook_id: str):
                     "imageUrl": _asset_url(s["image_path"]),
                     "videoUrl": _asset_url(s["video_path"]),
                     "audioUrl": _asset_url(s["audio_path"]),
+                    "dialogueLines": json.loads(s["dialogue_lines"]) if s.get("dialogue_lines") else None,
                     "status": s["status"],
                 }
                 for s in data["scenes"]

@@ -31,6 +31,7 @@ interface ProjectCardProps {
   readonly thumbnailUrl: string | null;
   readonly sceneCount: number;
   readonly createdAt: string;
+  readonly mode?: string;
   readonly featured?: boolean;
 }
 
@@ -89,6 +90,7 @@ export function ProjectCard({
   thumbnailUrl,
   sceneCount,
   createdAt,
+  mode,
   featured = false,
 }: ProjectCardProps) {
   if (featured) {
@@ -131,6 +133,12 @@ export function ProjectCard({
           <span className="absolute bottom-2 right-2 z-10 px-2 py-0.5 rounded-full bg-black/60 border border-white/10 text-[11px] font-display text-text-muted backdrop-blur-sm">
             {sceneCount} {sceneCount === 1 ? "scene" : "scenes"}
           </span>
+          {/* Mode badge */}
+          {mode === "movie" && (
+            <span className="absolute top-2 left-2 z-10 px-2 py-0.5 rounded-full bg-accent-amber/20 border border-accent-amber/30 text-[10px] font-display text-accent-amber backdrop-blur-sm">
+              Movie
+            </span>
+          )}
         </div>
 
         {/* Info */}

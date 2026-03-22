@@ -5,7 +5,7 @@ import { useConversationStore } from "../stores/conversationStore";
 import { useStorybookStore } from "../stores/storybookStore";
 import { useUIStore } from "../stores/uiStore";
 import { WSClient, ServerMessage } from "../lib/wsClient";
-import { Scene } from "../lib/types";
+import { DialogueLine, Scene, StoryMode, CharacterConfig } from "../lib/types";
 
 const BACKEND_URL =
   process.env.NEXT_PUBLIC_BACKEND_URL ?? "http://localhost:3001";
@@ -16,7 +16,11 @@ function prefixAssetUrl(url: string | null): string | null {
   return `${BACKEND_URL}${url}`;
 }
 
-export function useAgent(storybookId?: string) {
+export function useAgent(
+  storybookId?: string,
+  projectMode?: StoryMode,
+  projectCharacters?: readonly CharacterConfig[],
+) {
   const clientRef = useRef<WSClient | null>(null);
   const sessionIdRef = useRef<string | null>(null);
   const isProcessing = useRef(false);
@@ -59,6 +63,13 @@ export function useAgent(storybookId?: string) {
             // sessionStorage may be unavailable in some contexts
           }
           console.debug("[SayCut] Session created:", sessionIdRef.current);
+          // Send project mode if known (for new projects)
+          if (projectMode && !storybookId) {
+            clientRef.current?.sendSetProjectMode(
+              projectMode,
+              projectCharacters,
+            );
+          }
           // If resuming an existing storybook, tell the backend
           if (storybookId) {
             clientRef.current?.sendLoadStorybook(storybookId);
@@ -147,10 +158,15 @@ export function useAgent(storybookId?: string) {
             audioUrl: prefixAssetUrl(
               (sceneData.audioUrl as string | null) ?? null,
             ),
+            dialogueLines:
+              (sceneData.dialogueLines as DialogueLine[] | undefined) ??
+              undefined,
             status: (sceneData.status as Scene["status"]) ?? "empty",
           };
           addScene(scene);
-          if (!firstSceneAdded.current) {
+          // Auto-select first scene, or any scene if nothing is selected
+          const currentSelected = useUIStore.getState().selectedSceneId;
+          if (!firstSceneAdded.current || !currentSelected) {
             firstSceneAdded.current = true;
             selectScene(scene.id);
           }
@@ -209,15 +225,19 @@ export function useAgent(storybookId?: string) {
       removeScene,
       selectScene,
       storybookId,
+      projectMode,
+      projectCharacters,
     ],
   );
+
+  // Store handler in a ref so the WS lifecycle doesn't depend on it
+  const handlerRef = useRef(handleMessage);
+  handlerRef.current = handleMessage;
 
   useEffect(() => {
     const client = new WSClient();
     clientRef.current = client;
-    client.connect(handleMessage);
 
-    // Give the WebSocket a moment to connect, then init session
     let savedSessionId: string | null = null;
     try {
       savedSessionId = sessionStorage.getItem(
@@ -226,15 +246,20 @@ export function useAgent(storybookId?: string) {
     } catch {
       // sessionStorage may be unavailable
     }
-    const timer = setTimeout(() => {
-      client.sendSessionInit(savedSessionId ?? undefined);
-    }, 500);
+
+    client.connect(
+      (msg) => handlerRef.current(msg),
+      () => {
+        // Fired on WS open — guaranteed to be connected
+        client.sendSessionInit(savedSessionId ?? undefined);
+      },
+    );
 
     return () => {
-      clearTimeout(timer);
       client.disconnect();
     };
-  }, [handleMessage]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [storybookId]);
 
   const sendAudio = useCallback(
     (base64Wav: string) => {

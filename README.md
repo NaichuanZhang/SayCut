@@ -4,32 +4,36 @@
 
 SayCut lets you build rich, narrated visual storybooks through natural voice conversation. Powered by BosonAI's HiggsAudioM3 voice agent, you describe your characters, plot, and style — and SayCut handles the rest: generating scripts, illustrations, narration, and video.
 
+SayCut supports two creation modes:
+- **Story mode** — Single narrator with narration text per scene, single TTS voice
+- **Movie mode** — 2-person conversational scripts with dialogue lines per scene, 3 voices (Narrator + 2 characters), multi-voice TTS via WAV concatenation
+
 ## How It Works
 
 SayCut guides you through five phases, all driven by voice interaction:
 
-### 1. Story Setup
+### 1. Choose a Mode
 
-Start by talking to the voice agent. Describe your characters, setting, and the tone you're going for. Pick an art style — watercolor, pixel art, anime, or something else entirely. The agent extracts structured details from your conversation and generates character portraits for you to confirm before moving on.
+Select **Story** or **Movie** mode. Movie mode lets you configure two character names and voices.
 
-### 2. Script Generation
+### 2. Describe Your Idea
 
-The agent writes a scene-by-scene script with narration and dialogue, assigning roles to each character. You can ask it to read the script back, then revise on the fly — "make the ending funnier" or "add a plot twist in scene three."
+Talk to the voice agent — describe characters, setting, tone, and art style. The agent generates a scene-by-scene script (narration text in Story mode, dialogue lines in Movie mode).
 
 ### 3. Storyboard
 
-Key frame images are generated for each scene, keeping character appearances consistent throughout. Review the frames and request changes — "make the dragon bigger" or "change the background to a forest."
+Key frame images are generated for each scene. Review the frames and request changes — "make the dragon bigger" or "change the background to a forest."
 
 ### 4. Production
 
-Once you approve the storyboard, SayCut assembles everything:
+SayCut assembles everything:
 - Generates video sequences from the key frames (image-to-video)
-- Produces narration audio via text-to-speech
+- Produces narration audio (Story) or multi-voice dialogue audio (Movie) via TTS
 - Combines visuals and audio into the final storybook
 
 ### 5. Playback & Edit
 
-Watch your completed storybook. If something isn't right, tell the agent which scene to revise and it regenerates just that part.
+Watch your completed storybook in the cinematic player. If something isn't right, tell the agent which scene to revise and it regenerates just that part. You can also insert or remove scenes by voice.
 
 ## Tech Stack
 
@@ -123,24 +127,28 @@ uv run python assistant.py --model higgs-audio-understanding-v3-Hackathon
 ## Architecture
 
 ### Backend (`backend/`)
-- **`main.py`** — FastAPI app: `/ws` WebSocket endpoint, `/health`, static asset serving
-- **`ws_handler.py`** — WebSocket session management, routes audio/text to the voice agent
+- **`main.py`** — FastAPI app: `/ws` WebSocket endpoint, `/health`, REST endpoints, static asset serving
+- **`ws_handler.py`** — Per-session `VoiceAgent` with mode-specific tools/prompt, `SET_PROJECT_MODE` + `LOAD_STORYBOOK` handlers
 - **`ws_protocol.py`** — Client/server message type enums and JSON encode/decode
-- **`voice_agent.py`** — Async `VoiceAgent`: streaming responses, conversation history, tool call loop
-- **`storybook_tools.py`** — Async tool executors for script, image, audio, video, and image editing
-- **`db.py`** — Async SQLite (sessions, storybooks, scenes, messages) via `aiosqlite`
-- **`asset_storage.py`** — Save/serve generated assets (images, video, audio) on local filesystem
+- **`voice_agent.py`** — Async `VoiceAgent`: streaming responses, conversation history, tool call loop; mode-specific system prompts (`STORY_SYSTEM_PROMPT`, `MOVIE_SYSTEM_PROMPT`)
+- **`storybook_tools.py`** — Mode-specific tool sets (`STORY_TOOLS`, `MOVIE_TOOLS`) with shared image/video/edit/remove tools; async executors for script, movie script, image, audio, dialogue audio, video, edit, remove
+- **`db.py`** — Async SQLite (sessions, storybooks, scenes, messages) via `aiosqlite`; supports mode, characters, and dialogue_lines fields
+- **`asset_storage.py`** — Save/serve/delete generated assets (images, video, audio) on local filesystem
 - **`config.py`** — Env vars, paths, port config
 
 ### Shared utilities (`bosonUtil/`)
 - **`audio.py`** — Audio chunking pipeline: load, resample to 16kHz, Silero VAD segmentation, 4-second chunking, base64 WAV encoding
+- **`audio_concat.py`** — WAV concatenation for multi-voice dialogue: normalizes to 24kHz/16-bit/mono, inserts silence gaps between segments
 - **`api.py`** — API configuration, message building, and prediction calls against the OpenAI-compatible endpoint
 - **`tools.py`** — Tool definitions, `<tool_call>` tag parsing, and safe math evaluation
 
 ### Frontend (`frontend/app/`)
-- **`lib/wsClient.ts`** — `WSClient` class: WebSocket connection to backend with auto-reconnect
-- **`hooks/useAgent.ts`** — React hook: manages WebSocket lifecycle, dispatches server events to stores
+- **`lib/wsClient.ts`** — `WSClient` class: WebSocket connection with auto-reconnect and `onReady` callback
+- **`hooks/useAgent.ts`** — React hook: manages WebSocket lifecycle, dispatches server events to stores; sends `SET_PROJECT_MODE` and `LOAD_STORYBOOK` as needed
 - **`hooks/useAudioRecorder.ts`** — React hook: browser mic capture → 16kHz PCM WAV → base64
+- **`components/ModeSelector.tsx`** — Mode selection screen: Story vs Movie cards, character name/voice config for movie mode
+- **`components/SceneEditor.tsx`** — Scene thumbnail grid; renders dialogue lines (movie) or narration textarea (story)
+- **`components/PlayerOverlay.tsx`** — Cinematic player with crossfade; stacked dialogue subtitles (movie) or narration text (story)
 - **`components/VoiceOrb.tsx`** — Toggle-click voice input (tap to start/stop recording)
 
 ### CLI demo

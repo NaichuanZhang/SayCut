@@ -8,6 +8,7 @@ import aiosqlite
 _ALLOWED_SCENE_FIELDS = frozenset({
     "title", "narration_text", "visual_description",
     "image_path", "video_path", "audio_path", "status",
+    "dialogue_lines",
 })
 
 _CREATE_TABLES_SQL = """
@@ -20,6 +21,8 @@ CREATE TABLE IF NOT EXISTS storybooks (
     id TEXT PRIMARY KEY,
     session_id TEXT NOT NULL REFERENCES sessions(id),
     title TEXT NOT NULL DEFAULT '',
+    mode TEXT NOT NULL DEFAULT 'story',
+    characters TEXT,
     created_at TEXT NOT NULL
 );
 
@@ -33,6 +36,7 @@ CREATE TABLE IF NOT EXISTS scenes (
     image_path TEXT,
     video_path TEXT,
     audio_path TEXT,
+    dialogue_lines TEXT,
     status TEXT NOT NULL DEFAULT 'empty',
     created_at TEXT NOT NULL
 );
@@ -61,6 +65,20 @@ async def init_db(db_path: str = ":memory:") -> aiosqlite.Connection:
     db.row_factory = aiosqlite.Row
     await db.executescript(_CREATE_TABLES_SQL)
     await db.commit()
+
+    # Migrate existing DBs that lack new columns
+    _MIGRATIONS = [
+        "ALTER TABLE storybooks ADD COLUMN mode TEXT NOT NULL DEFAULT 'story'",
+        "ALTER TABLE storybooks ADD COLUMN characters TEXT",
+        "ALTER TABLE scenes ADD COLUMN dialogue_lines TEXT",
+    ]
+    for sql in _MIGRATIONS:
+        try:
+            await db.execute(sql)
+            await db.commit()
+        except Exception:
+            pass  # column already exists
+
     return db
 
 
@@ -82,12 +100,16 @@ async def get_session(db: aiosqlite.Connection, session_id: str) -> dict | None:
 
 
 async def create_storybook(
-    db: aiosqlite.Connection, session_id: str, title: str
+    db: aiosqlite.Connection,
+    session_id: str,
+    title: str,
+    mode: str = "story",
+    characters: str | None = None,
 ) -> str:
     bid = _new_id()
     await db.execute(
-        "INSERT INTO storybooks (id, session_id, title, created_at) VALUES (?, ?, ?, ?)",
-        (bid, session_id, title, _now()),
+        "INSERT INTO storybooks (id, session_id, title, mode, characters, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+        (bid, session_id, title, mode, characters, _now()),
     )
     await db.commit()
     return bid
@@ -109,12 +131,13 @@ async def create_scene(
     title: str,
     narration_text: str,
     visual_description: str,
+    dialogue_lines: str | None = None,
 ) -> str:
     sid = _new_id()
     await db.execute(
-        "INSERT INTO scenes (id, storybook_id, idx, title, narration_text, visual_description, created_at) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?)",
-        (sid, storybook_id, idx, title, narration_text, visual_description, _now()),
+        "INSERT INTO scenes (id, storybook_id, idx, title, narration_text, visual_description, dialogue_lines, created_at) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        (sid, storybook_id, idx, title, narration_text, visual_description, dialogue_lines, _now()),
     )
     await db.commit()
     return sid
@@ -197,7 +220,7 @@ async def list_storybooks(db: aiosqlite.Connection) -> list[dict]:
     """List all storybooks with thumbnail and scene count, newest first."""
     cursor = await db.execute(
         """
-        SELECT s.id, s.session_id, s.title, s.created_at,
+        SELECT s.id, s.session_id, s.title, s.mode, s.characters, s.created_at,
                (SELECT sc.image_path FROM scenes sc
                 WHERE sc.storybook_id = s.id ORDER BY sc.idx LIMIT 1) as thumbnail_path,
                (SELECT COUNT(*) FROM scenes sc

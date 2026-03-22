@@ -125,23 +125,45 @@ export function SceneEditor() {
           )}
         </div>
 
-        {/* Narration / Script text */}
+        {/* Dialogue lines (movie mode) or narration text (story mode) */}
         <div>
           <label className="block font-display text-xs text-text-muted uppercase tracking-wider mb-2">
-            Narration
+            {scene.dialogueLines ? "Dialogue" : "Narration"}
           </label>
-          <textarea
-            value={localText}
-            onChange={(e) => handleTextChange(e.target.value)}
-            className={clsx(
-              "w-full rounded-lg bg-bg-surface border border-border-subtle px-4 py-3",
-              "text-sm leading-relaxed text-text-primary font-body",
-              "resize-none focus:outline-none focus:ring-1 focus:ring-accent-cyan/50 focus:border-accent-cyan/30",
-              "placeholder:text-text-muted/40",
-            )}
-            rows={4}
-            placeholder="Narration text will appear here..."
-          />
+          {scene.dialogueLines && scene.dialogueLines.length > 0 ? (
+            <div className="rounded-lg bg-bg-surface border border-border-subtle px-4 py-3 space-y-2">
+              {scene.dialogueLines.map((line, i) => (
+                <div key={i} className="flex gap-2 items-start">
+                  <span
+                    className={clsx(
+                      "font-display text-xs font-medium uppercase tracking-wider shrink-0 mt-0.5",
+                      line.character === "Narrator"
+                        ? "text-text-muted"
+                        : "text-accent-cyan",
+                    )}
+                  >
+                    {line.character}:
+                  </span>
+                  <span className="text-sm text-text-primary leading-relaxed">
+                    {line.text}
+                  </span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <textarea
+              value={localText}
+              onChange={(e) => handleTextChange(e.target.value)}
+              className={clsx(
+                "w-full rounded-lg bg-bg-surface border border-border-subtle px-4 py-3",
+                "text-sm leading-relaxed text-text-primary font-body",
+                "resize-none focus:outline-none focus:ring-1 focus:ring-accent-cyan/50 focus:border-accent-cyan/30",
+                "placeholder:text-text-muted/40",
+              )}
+              rows={4}
+              placeholder="Narration text will appear here..."
+            />
+          )}
         </div>
 
         {/* Audio controls */}

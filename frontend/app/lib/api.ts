@@ -1,10 +1,12 @@
-import { Scene } from "./types";
+import { CharacterConfig, DialogueLine, Scene, StoryMode } from "./types";
 
 const BASE = process.env.NEXT_PUBLIC_BACKEND_URL ?? "http://localhost:3001";
 
 export interface StorybookSummary {
   readonly id: string;
   readonly title: string;
+  readonly mode: StoryMode;
+  readonly characters?: readonly CharacterConfig[] | null;
   readonly createdAt: string;
   readonly thumbnailUrl: string | null;
   readonly sceneCount: number;
@@ -13,6 +15,8 @@ export interface StorybookSummary {
 export interface StorybookDetail {
   readonly id: string;
   readonly title: string;
+  readonly mode: StoryMode;
+  readonly characters?: readonly CharacterConfig[] | null;
   readonly sessionId: string;
   readonly createdAt: string;
   readonly scenes: readonly Scene[];

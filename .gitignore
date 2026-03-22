@@ -16,5 +16,12 @@ __pycache__/
 generated_assets/
 saycut.db
 
+# Playwright MCP logs
+.playwright-mcp/
+
+# Screenshots
+landing-page-full.png
+landing-v2-full.png
+
 # OS
 .DS_Store

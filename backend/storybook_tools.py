@@ -10,6 +10,7 @@ logger = logging.getLogger(__name__)
 
 import aiosqlite
 
+from bosonUtil.audio_concat import concatenate_wavs
 from bosonUtil.eigen_script import generate_script
 from bosonUtil.eigen_image_gen import generate_image
 from bosonUtil.eigen_image_edit import edit_image
@@ -17,7 +18,7 @@ from bosonUtil.eigen_i2v import generate_video
 from bosonUtil.eigen_tts import synthesize_speech
 
 from backend.asset_storage import delete_asset, save_asset, get_asset_url
-from backend.db import create_scene, delete_scene, get_scenes_by_storybook, shift_scene_indices, update_scene_field
+from backend.db import create_scene, delete_scene, get_scenes_by_storybook, get_storybook, shift_scene_indices, update_scene_field
 
 SendEvent = Callable[..., Awaitable[None]]
 
@@ -28,35 +29,7 @@ async def _validate_scene(db: aiosqlite.Connection, scene_id: str) -> dict | Non
     row = await cursor.fetchone()
     return dict(row) if row else None
 
-STORYBOOK_TOOLS = [
-    {
-        "type": "function",
-        "function": {
-            "name": "generate_script",
-            "description": (
-                "Generate a scene-by-scene storybook script from a story prompt. "
-                "Returns JSON with title and array of scenes."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "story_prompt": {
-                        "type": "string",
-                        "description": "The story idea or prompt from the user",
-                    },
-                    "num_scenes": {
-                        "type": "integer",
-                        "description": "Number of scenes to generate (default 4)",
-                    },
-                    "insert_after_scene_id": {
-                        "type": "string",
-                        "description": "Scene ID after which to insert new scenes. Omit to append at end.",
-                    },
-                },
-                "required": ["story_prompt"],
-            },
-        },
-    },
+_SHARED_TOOLS = [
     {
         "type": "function",
         "function": {
@@ -72,21 +45,6 @@ STORYBOOK_TOOLS = [
                     },
                 },
                 "required": ["scene_id", "visual_description"],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "generate_scene_audio",
-            "description": "Generate narration audio (text-to-speech) for a scene.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "scene_id": {"type": "string", "description": "The scene ID"},
-                    "narration_text": {"type": "string", "description": "Text to speak"},
-                },
-                "required": ["scene_id", "narration_text"],
             },
         },
     },
@@ -144,6 +102,112 @@ STORYBOOK_TOOLS = [
         },
     },
 ]
+
+STORY_TOOLS = [
+    {
+        "type": "function",
+        "function": {
+            "name": "generate_script",
+            "description": (
+                "Generate a scene-by-scene storybook narration script from a story prompt. "
+                "Returns JSON with title and array of scenes."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "story_prompt": {
+                        "type": "string",
+                        "description": "The story idea or prompt from the user",
+                    },
+                    "num_scenes": {
+                        "type": "integer",
+                        "description": "Number of scenes to generate (default 4)",
+                    },
+                    "insert_after_scene_id": {
+                        "type": "string",
+                        "description": "Scene ID after which to insert new scenes. Omit to append at end.",
+                    },
+                },
+                "required": ["story_prompt"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "generate_scene_audio",
+            "description": "Generate narration audio (text-to-speech) for a scene.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "scene_id": {"type": "string", "description": "The scene ID"},
+                    "narration_text": {"type": "string", "description": "Text to speak"},
+                },
+                "required": ["scene_id", "narration_text"],
+            },
+        },
+    },
+    *_SHARED_TOOLS,
+]
+
+MOVIE_TOOLS = [
+    {
+        "type": "function",
+        "function": {
+            "name": "generate_movie_script",
+            "description": (
+                "Generate a conversational movie script with dialogue lines between characters. "
+                "Returns JSON with title and array of scenes, each with dialogue_lines."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "story_prompt": {
+                        "type": "string",
+                        "description": "The story idea or prompt from the user",
+                    },
+                    "num_scenes": {
+                        "type": "integer",
+                        "description": "Number of scenes to generate (default 4)",
+                    },
+                    "insert_after_scene_id": {
+                        "type": "string",
+                        "description": "Scene ID after which to insert new scenes. Omit to append at end.",
+                    },
+                },
+                "required": ["story_prompt"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "generate_scene_dialogue_audio",
+            "description": (
+                "Generate multi-voice dialogue audio for a scene from its dialogue lines. "
+                "Reads dialogue lines and voice mapping from the storybook data."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "scene_id": {"type": "string", "description": "The scene ID"},
+                },
+                "required": ["scene_id"],
+            },
+        },
+    },
+    *_SHARED_TOOLS,
+]
+
+# Backward compatibility alias
+STORYBOOK_TOOLS = STORY_TOOLS
+
+
+def get_tools_for_mode(mode: str) -> list[dict]:
+    """Return the appropriate tool list for the given storybook mode."""
+    if mode == "movie":
+        return MOVIE_TOOLS
+    return STORY_TOOLS
 
 _SCRIPT_SYSTEM_PROMPT = (
     "You are a storybook script writer. Given a story prompt, generate a JSON object with "
@@ -221,10 +285,181 @@ async def _execute_generate_script(
         result_scenes.append(scene_payload)
 
     model_scenes = [
-        {"id": s["id"], "index": s["index"], "title": s["title"], "narrationText": s["narrationText"]}
+        {"scene_id": s["id"], "index": s["index"], "title": s["title"], "narrationText": s["narrationText"]}
         for s in result_scenes
     ]
     return {"name": "generate_script", "title": title, "scenes": model_scenes}
+
+
+_MOVIE_SCRIPT_SYSTEM_PROMPT = (
+    "You are a movie script writer. Given a story prompt, generate a JSON object with "
+    "a 'title' field and a 'scenes' array. Each scene has 'title', 'visual_description', "
+    "and 'dialogue_lines' (an array of {\"character\": \"...\", \"text\": \"...\"}). "
+    "Use 'Narrator' for scene-setting descriptions. Other characters speak their lines. "
+    "Output ONLY valid JSON, no other text."
+)
+
+
+async def _execute_generate_movie_script(
+    args: dict,
+    send_event: SendEvent,
+    db: aiosqlite.Connection,
+    session_id: str,
+    storybook_id: str,
+    assets_dir: str,
+) -> dict:
+    story_prompt = args.get("story_prompt", "")
+    num_scenes = args.get("num_scenes", 4)
+
+    # Get character names from storybook for the prompt
+    sb = await get_storybook(db, storybook_id)
+    characters_json = sb.get("characters") if sb else None
+    char_names = []
+    if characters_json:
+        chars = json.loads(characters_json)
+        char_names = [c["name"] for c in chars if c["name"] != "Narrator"]
+
+    char_hint = ""
+    if char_names:
+        char_hint = f" The characters are: {', '.join(char_names)}."
+
+    messages = [
+        {"role": "system", "content": _MOVIE_SCRIPT_SYSTEM_PROMPT},
+        {"role": "user", "content": f"Create a {num_scenes}-scene movie script about: {story_prompt}.{char_hint}"},
+    ]
+
+    raw = await generate_script(messages)
+
+    cleaned = raw.strip()
+    if not cleaned:
+        return {"name": "generate_movie_script", "error": "Script generation returned empty response"}
+    if cleaned.startswith("```"):
+        cleaned = cleaned.split("\n", 1)[-1].rsplit("```", 1)[0].strip()
+
+    try:
+        script = json.loads(cleaned)
+    except json.JSONDecodeError as e:
+        return {"name": "generate_movie_script", "error": f"Invalid JSON from script generator: {e}"}
+    title = script.get("title", "Untitled Movie")
+    scenes_data = script.get("scenes", [])
+
+    insert_after_id = args.get("insert_after_scene_id")
+    if insert_after_id:
+        target = await _validate_scene(db, insert_after_id)
+        if not target:
+            return {"name": "generate_movie_script", "error": f"Scene {insert_after_id} not found"}
+        insert_idx = target["idx"] + 1
+        await shift_scene_indices(db, storybook_id, insert_idx, len(scenes_data))
+        shifted = await get_scenes_by_storybook(db, storybook_id)
+        for s in shifted:
+            if s["idx"] >= insert_idx + len(scenes_data):
+                await send_event("scene_update", scene_id=s["id"], field="index", value=s["idx"])
+        idx_offset = insert_idx
+    else:
+        existing_scenes = await get_scenes_by_storybook(db, storybook_id)
+        idx_offset = len(existing_scenes)
+
+    result_scenes = []
+    for i, s in enumerate(scenes_data):
+        idx = idx_offset + i
+        dialogue_lines = s.get("dialogue_lines", [])
+        dialogue_lines_json = json.dumps(dialogue_lines)
+        # Concatenate dialogue text as narration_text for backward compat
+        narration_text = " ".join(line.get("text", "") for line in dialogue_lines)
+
+        scene_id = await create_scene(
+            db,
+            storybook_id=storybook_id,
+            idx=idx,
+            title=s.get("title", f"Scene {idx + 1}"),
+            narration_text=narration_text,
+            visual_description=s.get("visual_description", ""),
+            dialogue_lines=dialogue_lines_json,
+        )
+        scene_payload = {
+            "id": scene_id,
+            "index": idx,
+            "title": s.get("title", f"Scene {idx + 1}"),
+            "narrationText": narration_text,
+            "visualDescription": s.get("visual_description", ""),
+            "dialogueLines": dialogue_lines,
+            "imageUrl": None,
+            "videoUrl": None,
+            "audioUrl": None,
+            "status": "empty",
+        }
+        await send_event("scene_add", scene=scene_payload)
+        result_scenes.append(scene_payload)
+
+    model_scenes = [
+        {"scene_id": s["id"], "index": s["index"], "title": s["title"]}
+        for s in result_scenes
+    ]
+    return {
+        "name": "generate_movie_script",
+        "title": title,
+        "scenes": model_scenes,
+        "next_step": "Call generate_scene_image for each scene using the scene_id values above.",
+    }
+
+
+async def _execute_generate_dialogue_audio(
+    args: dict,
+    send_event: SendEvent,
+    db: aiosqlite.Connection,
+    session_id: str,
+    storybook_id: str,
+    assets_dir: str,
+) -> dict:
+    scene_id = args["scene_id"]
+
+    scene = await _validate_scene(db, scene_id)
+    if not scene:
+        return {"name": "generate_scene_dialogue_audio", "error": f"Scene {scene_id} not found"}
+
+    # Parse dialogue lines from scene
+    dialogue_lines_raw = scene.get("dialogue_lines")
+    if not dialogue_lines_raw:
+        return {"name": "generate_scene_dialogue_audio", "error": "Scene has no dialogue lines"}
+    dialogue_lines = json.loads(dialogue_lines_raw)
+
+    # Build voice map from storybook characters
+    sb = await get_storybook(db, storybook_id)
+    voice_map: dict[str, str] = {"Narrator": "Linda"}  # default
+    if sb and sb.get("characters"):
+        chars = json.loads(sb["characters"])
+        for c in chars:
+            voice_map[c["name"]] = c["voice"]
+
+    # Synthesize each line
+    wav_segments: list[bytes] = []
+    for line in dialogue_lines:
+        character = line.get("character", "Narrator")
+        text = line.get("text", "")
+        if not text.strip():
+            continue
+        voice = voice_map.get(character, "Linda")
+        result = await synthesize_speech(text, voice=voice)
+        wav_segments.append(result.wav_bytes)
+
+    if not wav_segments:
+        return {"name": "generate_scene_dialogue_audio", "error": "No dialogue to synthesize"}
+
+    combined_wav, total_duration = concatenate_wavs(wav_segments)
+
+    filename = f"scene_{scene_id}.wav"
+    rel_path = save_asset(assets_dir, session_id, filename, combined_wav)
+    url = get_asset_url(rel_path)
+
+    await update_scene_field(db, scene_id, "audio_path", rel_path)
+    await send_event("scene_update", scene_id=scene_id, field="audioUrl", value=url)
+
+    return {
+        "name": "generate_scene_dialogue_audio",
+        "scene_id": scene_id,
+        "status": "done",
+        "duration_s": total_duration,
+    }
 
 
 async def _execute_generate_image(
@@ -405,6 +640,14 @@ async def execute_storybook_tool(
     try:
         if tool_name == "generate_script":
             result = await _execute_generate_script(
+                args, send_event, db, session_id, storybook_id, assets_dir
+            )
+        elif tool_name == "generate_movie_script":
+            result = await _execute_generate_movie_script(
+                args, send_event, db, session_id, storybook_id, assets_dir
+            )
+        elif tool_name == "generate_scene_dialogue_audio":
+            result = await _execute_generate_dialogue_audio(
                 args, send_event, db, session_id, storybook_id, assets_dir
             )
         elif tool_name == "generate_scene_image":

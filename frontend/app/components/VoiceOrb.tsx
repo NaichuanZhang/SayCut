@@ -4,6 +4,7 @@ import { useCallback } from "react";
 import { motion } from "framer-motion";
 import clsx from "clsx";
 import { useUIStore } from "../stores/uiStore";
+import { useStorybookStore } from "../stores/storybookStore";
 import { useAudioRecorder } from "../hooks/useAudioRecorder";
 import { useAgent } from "../hooks/useAgent";
 import { useEditorContext } from "../lib/editorContext";
@@ -47,7 +48,9 @@ export function VoiceOrb({ compact = false }: VoiceOrbProps) {
   const { startRecording, stopRecording, analyserNode, error } =
     useAudioRecorder();
   const { storybookId } = useEditorContext();
-  const { sendAudio } = useAgent(storybookId);
+  const projectMode = useStorybookStore((s) => s.mode);
+  const projectCharacters = useStorybookStore((s) => s.characters);
+  const { sendAudio } = useAgent(storybookId, projectMode, projectCharacters);
 
   const handleClick = useCallback(async () => {
     if (agentState === "thinking" || agentState === "speaking") return;

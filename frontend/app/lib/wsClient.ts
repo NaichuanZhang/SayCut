@@ -30,6 +30,7 @@ export class WSClient {
   private ws: WebSocket | null = null;
   private readonly url: string;
   private handler: MessageHandler | null = null;
+  private onReadyCallback: (() => void) | null = null;
   private reconnectAttempts = 0;
   private shouldReconnect = true;
 
@@ -37,8 +38,9 @@ export class WSClient {
     this.url = url;
   }
 
-  connect(handler: MessageHandler): void {
+  connect(handler: MessageHandler, onReady?: () => void): void {
     this.handler = handler;
+    this.onReadyCallback = onReady ?? null;
     this.shouldReconnect = true;
     this.reconnectAttempts = 0;
     this.createConnection();
@@ -51,6 +53,7 @@ export class WSClient {
     this.ws.onopen = () => {
       console.debug("[SayCut] WS connected");
       this.reconnectAttempts = 0;
+      this.onReadyCallback?.();
     };
 
     this.ws.onmessage = (event) => {
@@ -108,6 +111,20 @@ export class WSClient {
 
   sendLoadStorybook(storybookId: string): void {
     this.send({ type: "load_storybook", storybook_id: storybookId });
+  }
+
+  sendSetProjectMode(
+    mode: string,
+    characters?: readonly { name: string; voice: string }[],
+  ): void {
+    const payload: Record<string, unknown> = {
+      type: "set_project_mode",
+      mode,
+    };
+    if (characters) {
+      payload.characters = characters;
+    }
+    this.send(payload);
   }
 
   disconnect(): void {

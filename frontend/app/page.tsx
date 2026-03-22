@@ -215,6 +215,7 @@ export default function ProjectsPage() {
                       thumbnailUrl={sb.thumbnailUrl}
                       sceneCount={sb.sceneCount}
                       createdAt={sb.createdAt}
+                      mode={sb.mode}
                     />
                   </motion.div>
                 ))}

@@ -1,9 +1,12 @@
 """WebSocket endpoint for the SayCut voice agent."""
 
 import base64
+import json
 import logging
+import os
 
-from fastapi import WebSocket, WebSocketDisconnect
+from fastapi import WebSocket
+from starlette.websockets import WebSocketDisconnect
 
 from backend.db import (
     create_message,
@@ -16,8 +19,8 @@ from backend.db import (
     init_db,
 )
 from backend.config import ASSETS_DIR, DB_PATH
-from backend.storybook_tools import STORYBOOK_TOOLS, execute_storybook_tool
-from backend.voice_agent import VoiceAgent, STORYBOOK_SYSTEM_PROMPT
+from backend.storybook_tools import STORY_TOOLS, MOVIE_TOOLS, get_tools_for_mode, execute_storybook_tool
+from backend.voice_agent import VoiceAgent, STORY_SYSTEM_PROMPT, get_system_prompt_for_mode
 from backend.ws_protocol import (
     ClientMessageType,
     ServerMessageType,
@@ -27,18 +30,15 @@ from backend.ws_protocol import (
 
 logger = logging.getLogger(__name__)
 
-# Module-level agent instance (created lazily)
-_agent: VoiceAgent | None = None
 
-
-def get_agent() -> VoiceAgent:
-    global _agent
-    if _agent is None:
-        import os
-
-        api_key = os.environ.get("BOSONAI_API_KEY", "EMPTY")
-        _agent = VoiceAgent(api_key=api_key, tools=STORYBOOK_TOOLS)
-    return _agent
+def _create_agent(mode: str = "story") -> VoiceAgent:
+    """Create a VoiceAgent configured for the given mode."""
+    api_key = os.environ.get("BOSONAI_API_KEY", "EMPTY")
+    return VoiceAgent(
+        api_key=api_key,
+        system_prompt=get_system_prompt_for_mode(mode),
+        tools=get_tools_for_mode(mode),
+    )
 
 
 async def websocket_endpoint(websocket: WebSocket):
@@ -48,15 +48,49 @@ async def websocket_endpoint(websocket: WebSocket):
 
     session_id: str | None = None
     storybook_id: str | None = None
+    storybook_mode: str = "story"
+    storybook_characters: str | None = None  # JSON string
+    agent: VoiceAgent | None = None
     db = await init_db(DB_PATH)
+
+    ws_closed = False
+
+    async def _safe_send(msg: str) -> None:
+        """Send a message, silently ignoring if the connection is already closed."""
+        nonlocal ws_closed
+        if ws_closed:
+            return
+        try:
+            await websocket.send_text(msg)
+        except (RuntimeError, WebSocketDisconnect):
+            ws_closed = True
+            logger.info("WS connection closed — further sends will be skipped")
+
+    def _get_agent() -> VoiceAgent:
+        nonlocal agent
+        if agent is None:
+            agent = _create_agent(storybook_mode)
+        return agent
+
+    def _reconfigure_agent(mode: str) -> VoiceAgent:
+        nonlocal agent, storybook_mode
+        storybook_mode = mode
+        agent = _create_agent(mode)
+        return agent
 
     async def _save_message(sid: str, role: str, text: str) -> None:
         await create_message(db, sid, role, text)
 
     async def _tool_executor(name: str, args: dict, send_event) -> dict:
         nonlocal storybook_id
-        if name == "generate_script" and storybook_id is None:
-            storybook_id = await create_storybook(db, session_id, "")
+        # Lazy storybook creation on first script generation
+        script_tools = ("generate_script", "generate_movie_script")
+        if name in script_tools and storybook_id is None:
+            storybook_id = await create_storybook(
+                db, session_id, "",
+                mode=storybook_mode,
+                characters=storybook_characters,
+            )
             await send_event(
                 "storybook_created", storybook_id=storybook_id
             )
@@ -74,7 +108,7 @@ async def websocket_endpoint(websocket: WebSocket):
             storybook_id=storybook_id,
             assets_dir=ASSETS_DIR,
         )
-        if name == "generate_script" and "title" in result:
+        if name in script_tools and "title" in result:
             await db.execute(
                 "UPDATE storybooks SET title = ? WHERE id = ?",
                 (result["title"], storybook_id),
@@ -83,7 +117,7 @@ async def websocket_endpoint(websocket: WebSocket):
         return result
 
     try:
-        while True:
+        while not ws_closed:
             raw = await websocket.receive_text()
             msg_type, payload = decode_client_message(raw)
 
@@ -113,10 +147,6 @@ async def websocket_endpoint(websocket: WebSocket):
                     existing = await get_session(db, requested_id)
                     if existing:
                         session_id = requested_id
-                        # Don't restore full message history into voice agent —
-                        # it includes internal messages (nudges, tool responses)
-                        # that pollute the model context. Instead, rely on
-                        # LOAD_STORYBOOK → inject_context() for resumed sessions.
                         logger.info("Resuming existing session %s", session_id)
                     else:
                         session_id = await create_session(db)
@@ -129,6 +159,13 @@ async def websocket_endpoint(websocket: WebSocket):
                         ServerMessageType.SESSION_CREATED, session_id=session_id
                     )
                 )
+
+            elif msg_type == ClientMessageType.SET_PROJECT_MODE:
+                mode = payload.get("mode", "story")
+                characters = payload.get("characters")
+                storybook_characters = json.dumps(characters) if characters else None
+                _reconfigure_agent(mode)
+                logger.info("Project mode set to %s (characters=%s)", mode, storybook_characters)
 
             elif msg_type == ClientMessageType.LOAD_STORYBOOK:
                 requested_storybook_id = payload.get("storybook_id")
@@ -148,7 +185,11 @@ async def websocket_endpoint(websocket: WebSocket):
                     )
                     continue
                 storybook_id = requested_storybook_id
-                # Inject context into the voice agent so it knows about the existing storybook
+                # Reconfigure agent for the storybook's mode
+                mode = sb.get("mode", "story")
+                storybook_characters = sb.get("characters")
+                current_agent = _reconfigure_agent(mode)
+                # Inject context into the voice agent
                 scenes = await get_scenes_by_storybook(db, storybook_id)
                 scene_titles = ", ".join(
                     f'Scene {s["idx"] + 1} (id="{s["id"]}"): "{s["title"]}"'
@@ -159,21 +200,20 @@ async def websocket_endpoint(websocket: WebSocket):
                     f"with {len(scenes)} scenes: {scene_titles}. "
                     "The user is resuming work on this storybook."
                 )
-                agent = get_agent()
-                agent.inject_context(session_id, context)
-                logger.info("Loaded storybook %s for session %s", storybook_id, session_id)
+                current_agent.inject_context(session_id, context)
+                logger.info("Loaded storybook %s (mode=%s) for session %s", storybook_id, mode, session_id)
 
             elif msg_type == ClientMessageType.TEXT_MESSAGE:
                 text = payload.get("text", "")
-                agent = get_agent()
+                current_agent = _get_agent()
 
                 async def send_event(event_type, **kwargs):
-                    await websocket.send_text(
+                    await _safe_send(
                         encode_server_message(ServerMessageType(event_type), **kwargs)
                     )
 
                 try:
-                    await agent.process_text(
+                    await current_agent.process_text(
                         session_id=session_id,
                         text=text,
                         send_event=send_event,
@@ -182,14 +222,14 @@ async def websocket_endpoint(websocket: WebSocket):
                     )
                 except Exception:
                     logger.exception("Error processing text message")
-                    await websocket.send_text(
+                    await _safe_send(
                         encode_server_message(
                             ServerMessageType.ERROR, message="Failed to process text"
                         )
                     )
                 finally:
                     logger.debug("Sending agent_idle after text processing")
-                    await websocket.send_text(
+                    await _safe_send(
                         encode_server_message(ServerMessageType.AGENT_IDLE)
                     )
 
@@ -197,15 +237,15 @@ async def websocket_endpoint(websocket: WebSocket):
                 audio_b64 = payload.get("data", "")
                 audio_bytes = base64.b64decode(audio_b64)
                 logger.debug("Received audio data, size=%d bytes", len(audio_bytes))
-                agent = get_agent()
+                current_agent = _get_agent()
 
                 async def send_event(event_type, **kwargs):
-                    await websocket.send_text(
+                    await _safe_send(
                         encode_server_message(ServerMessageType(event_type), **kwargs)
                     )
 
                 try:
-                    await agent.process_audio(
+                    await current_agent.process_audio(
                         session_id=session_id,
                         audio_bytes=audio_bytes,
                         send_event=send_event,
@@ -214,14 +254,14 @@ async def websocket_endpoint(websocket: WebSocket):
                     )
                 except Exception:
                     logger.exception("Error processing audio data")
-                    await websocket.send_text(
+                    await _safe_send(
                         encode_server_message(
                             ServerMessageType.ERROR, message="Failed to process audio"
                         )
                     )
                 finally:
                     logger.debug("Sending agent_idle after audio processing")
-                    await websocket.send_text(
+                    await _safe_send(
                         encode_server_message(ServerMessageType.AGENT_IDLE)
                     )
 

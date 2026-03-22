@@ -104,7 +104,7 @@ class TestExecuteGenerateScript:
 
         # Model response should only contain text fields, no URLs
         for scene in result["scenes"]:
-            assert set(scene.keys()) == {"id", "index", "title", "narrationText"}
+            assert set(scene.keys()) == {"scene_id", "index", "title", "narrationText"}
 
         scenes = await get_scenes_by_storybook(db, storybook_id)
         assert len(scenes) == 2

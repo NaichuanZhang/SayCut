@@ -10,9 +10,10 @@ import { fetchStorybook, fetchMessages } from "../../lib/api";
 import { AgentPanel } from "../../components/AgentPanel";
 import { Workspace } from "../../components/Workspace";
 import { PlayerOverlay } from "../../components/PlayerOverlay";
-import { Message, Scene } from "../../lib/types";
+import { CharacterConfig, Message, Scene, StoryMode } from "../../lib/types";
 import { stripToolCalls } from "../../lib/stripToolCalls";
 import { EditorContext } from "../../lib/editorContext";
+import { ModeSelector } from "../../components/ModeSelector";
 
 const BACKEND_URL =
   process.env.NEXT_PUBLIC_BACKEND_URL ?? "http://localhost:3001";
@@ -28,6 +29,7 @@ export default function EditorPage() {
   const id = params.id;
   const isNew = id === "new";
   const [ready, setReady] = useState(isNew);
+  const [modeSelected, setModeSelected] = useState(!isNew);
   const hydrated = useRef(false);
 
   const messages = useConversationStore((s) => s.messages);
@@ -39,8 +41,13 @@ export default function EditorPage() {
   );
 
   const setStorybookId = useStorybookStore((s) => s.setStorybookId);
+  const setMode = useStorybookStore((s) => s.setMode);
+  const setCharacters = useStorybookStore((s) => s.setCharacters);
   const loadScenes = useStorybookStore((s) => s.loadScenes);
   const selectScene = useUIStore((s) => s.selectScene);
+
+  const mode = useStorybookStore((s) => s.mode);
+  const characters = useStorybookStore((s) => s.characters);
 
   // Clean up stores on unmount
   useEffect(() => {
@@ -59,6 +66,8 @@ export default function EditorPage() {
     Promise.all([fetchStorybook(id), fetchMessages(id)])
       .then(([data, rawMsgs]) => {
         setStorybookId(data.id);
+        if (data.mode) setMode(data.mode);
+        if (data.characters) setCharacters(data.characters);
         const scenes: Scene[] = data.scenes.map((s) => ({
           ...s,
           imageUrl: prefixAssetUrl(s.imageUrl),
@@ -97,11 +106,20 @@ export default function EditorPage() {
         console.error("Failed to load storybook:", err);
         setReady(true);
       });
-  }, [id, isNew, setStorybookId, loadScenes, loadMessages, selectScene]);
+  }, [
+    id,
+    isNew,
+    setStorybookId,
+    setMode,
+    setCharacters,
+    loadScenes,
+    loadMessages,
+    selectScene,
+  ]);
 
-  // Show welcome message on mount (only for new projects)
+  // Show welcome message on mount (only for new projects after mode selection)
   useEffect(() => {
-    if (!isNew || messages.length > 0) return;
+    if (!isNew || !modeSelected || messages.length > 0) return;
 
     let cancelled = false;
     const text = MOCK_AGENT_RESPONSES.welcome;
@@ -121,7 +139,18 @@ export default function EditorPage() {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isNew]);
+  }, [isNew, modeSelected]);
+
+  const handleModeConfirm = (
+    selectedMode: StoryMode,
+    selectedCharacters: readonly CharacterConfig[],
+  ) => {
+    setMode(selectedMode);
+    if (selectedMode === "movie") {
+      setCharacters(selectedCharacters);
+    }
+    setModeSelected(true);
+  };
 
   const editorCtx = useMemo(
     () => ({ storybookId: isNew ? undefined : id }),
@@ -134,6 +163,11 @@ export default function EditorPage() {
         <div className="h-6 w-6 rounded-full border-2 border-accent-cyan border-t-transparent animate-spin" />
       </div>
     );
+  }
+
+  // Show mode selection screen for new projects
+  if (isNew && !modeSelected) {
+    return <ModeSelector onConfirm={handleModeConfirm} />;
   }
 
   return (

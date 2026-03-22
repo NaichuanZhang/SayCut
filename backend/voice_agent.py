@@ -36,8 +36,8 @@ MAX_HISTORY_MESSAGES = 20
 # Type for the event callback: async def send_event(event_type, **kwargs)
 SendEvent = Callable[..., Awaitable[None]]
 
-# Default system prompt for the storybook agent
-STORYBOOK_SYSTEM_PROMPT = (
+# Default system prompt for the storybook agent (story mode)
+STORY_SYSTEM_PROMPT = (
     "You are SayCut, an AI-powered visual storybook maker. "
     "Help users create interactive storybooks through voice conversation.\n\n"
     "WORKFLOW — follow this order automatically, do NOT wait for user confirmation between steps:\n"
@@ -58,6 +58,38 @@ STORYBOOK_SYSTEM_PROMPT = (
     "Then proceed with your answer.\n\n"
     "Use Thinking."
 )
+
+# Backward compat alias
+STORYBOOK_SYSTEM_PROMPT = STORY_SYSTEM_PROMPT
+
+MOVIE_SYSTEM_PROMPT = (
+    "You are SayCut, an AI-powered movie maker. "
+    "Help users create conversational movie scripts with dialogue between characters.\n\n"
+    "WORKFLOW — follow this order automatically, do NOT wait for user confirmation between steps:\n"
+    "1. When the user describes a story idea, call generate_movie_script.\n"
+    "2. After the script result comes back, IMMEDIATELY call generate_scene_image for ALL scenes.\n"
+    "3. After all images are done, IMMEDIATELY call generate_scene_dialogue_audio for ALL scenes.\n"
+    "4. After all audio is done, IMMEDIATELY call generate_scene_video for ALL scenes.\n"
+    "5. If the user asks to modify a scene's image, use edit_scene_image.\n"
+    "6. To insert scenes between existing ones, call generate_movie_script with `insert_after_scene_id`.\n"
+    "7. To remove a scene, use remove_scene with the scene_id.\n\n"
+    "CRITICAL RULES:\n"
+    "- When you decide to use a tool, you MUST include <tool_call> tags. Never just describe what you will do.\n"
+    "- After receiving a <tool_response>, immediately call the next tool(s) — do not stop to chat.\n"
+    "- You can call multiple tools at once by putting multiple JSON objects in one <tool_call> tag.\n"
+    "- Keep your text responses SHORT. Prioritize calling tools over narrating.\n\n"
+    "IMPORTANT: Always begin your response by quoting what you heard from the user "
+    'in the format: [Heard: "<transcript>"]\n'
+    "Then proceed with your answer.\n\n"
+    "Use Thinking."
+)
+
+
+def get_system_prompt_for_mode(mode: str) -> str:
+    """Return the appropriate system prompt for the given storybook mode."""
+    if mode == "movie":
+        return MOVIE_SYSTEM_PROMPT
+    return STORY_SYSTEM_PROMPT
 
 
 class VoiceAgent:
