@@ -2,7 +2,7 @@
 
 **An AI-powered visual audio storybook maker — create interactive storybooks just by talking.**
 
-SayCut lets you build rich, narrated visual storybooks through natural voice conversation. Powered by BosonAI's HiggsAudioM3 voice agent, you describe your characters, plot, and style — and SayCut handles the rest: generating scripts, illustrations, narration, and video.
+SayCut lets you build rich, narrated visual storybooks through natural voice conversation. Powered by BosonAI's ASR v3.5 model voice agent, you describe your characters, plot, and style — and SayCut handles the rest: generating scripts, illustrations, narration, and video.
 
 SayCut supports two creation modes:
 - **Story mode** — Single narrator with narration text per scene, single TTS voice
